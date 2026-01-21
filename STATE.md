@@ -4,7 +4,7 @@
 Phase 1: Initial Implementation
 
 ## Status
-🚧 Implementing - Task 7 in review
+🚧 Implementing - Task 8 in progress
 
 ## Completed
 - [x] Set up Claude Code permissions
@@ -17,12 +17,12 @@ Phase 1: Initial Implementation
 - [x] Task 4: Dispatcher Module (290d5b2)
 - [x] Task 5: Route Executor (e6b3aa8)
 - [x] Task 6: Mastermind Integration (69d01be)
+- [x] Task 7: Capture Pipeline (0db322f) - reviewed and approved
 
 ## In Progress
-- [ ] Task 7: Capture Pipeline - implementation done (0db322f), awaiting spec/code review
+- [ ] Task 8: HTTP Server
 
 ## Next Up
-- [ ] Task 8: HTTP Server
 - [ ] Task 9: Web Widget
 - [ ] Task 10: Seed Routes for Testing
 - [ ] Task 11: Playwright E2E Tests
