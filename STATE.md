@@ -4,26 +4,29 @@
 Phase 1: Initial Implementation
 
 ## Status
-🚧 Ready to implement - Spec finalized
+🚧 Ready to implement - Plan written
 
 ## Completed
 - [x] Set up Claude Code permissions
 - [x] Created STATE.md
 - [x] Brainstorming and spec refinement
+- [x] Implementation plan written (docs/plans/2026-01-21-slapture-phase1.md)
 
 ## In Progress
-- [ ] Project scaffolding (package.json, tsconfig, directory structure)
+- [ ] Task 1: Project Scaffolding
 
-## Next Up
-- [ ] Core types (Capture, Route, ExecutionStep)
-- [ ] Storage layer (file-based CRUD)
-- [ ] Parser module
-- [ ] Dispatcher module
-- [ ] Route handlers (write-to-file, post-to-url)
-- [ ] Mastermind integration (Anthropic API)
-- [ ] HTTP server
-- [ ] Web widget
-- [ ] Playwright tests for Example Sets A-E
+## Next Up (from plan)
+- [ ] Task 2: Storage Layer
+- [ ] Task 3: Parser Module
+- [ ] Task 4: Dispatcher Module
+- [ ] Task 5: Route Executor (Transform Scripts)
+- [ ] Task 6: Mastermind Integration
+- [ ] Task 7: Capture Pipeline (Orchestration)
+- [ ] Task 8: HTTP Server
+- [ ] Task 9: Web Widget
+- [ ] Task 10: Seed Routes for Testing
+- [ ] Task 11: Playwright E2E Tests
+- [ ] Task 12: Final Integration and Cleanup
 
 ## Design Decisions (from brainstorming)
 - **API key**: ANTHROPIC_API_KEY environment variable
