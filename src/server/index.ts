@@ -4,7 +4,6 @@ import { Storage } from '../storage/index.js';
 import { CapturePipeline } from '../pipeline/index.js';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
 
 export async function buildServer(
   storage: Storage,
@@ -81,8 +80,8 @@ export async function buildServer(
 
   // GET /widget - Serve web widget
   server.get('/widget', async (request, reply) => {
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const widgetPath = path.join(__dirname, '..', 'widget', 'index.html');
+    // Look for widget in src/ (source) since HTML isn't compiled
+    const widgetPath = path.join(process.cwd(), 'src', 'widget', 'index.html');
 
     if (!fs.existsSync(widgetPath)) {
       return reply.code(404).send('Widget not found');

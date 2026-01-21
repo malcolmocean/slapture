@@ -9,5 +9,8 @@ export default defineConfig({
     command: 'pnpm start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
+    env: {
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || 'test-key',
+    },
   },
 });
