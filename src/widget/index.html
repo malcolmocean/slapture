@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Slapture</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      width: 100%;
+      max-width: 500px;
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 20px;
+      color: #333;
+    }
+    .input-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 12px 16px;
+      font-size: 16px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus {
+      border-color: #007aff;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 16px;
+      background: #007aff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .status {
+      padding: 16px;
+      background: white;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    .status.hidden {
+      display: none;
+    }
+    .status-step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      color: #666;
+    }
+    .status-step.active {
+      color: #007aff;
+      font-weight: 500;
+    }
+    .status-step.done {
+      color: #28a745;
+    }
+    .status-step.error {
+      color: #dc3545;
+    }
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #ddd;
+      border-top-color: #007aff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .check {
+      color: #28a745;
+    }
+    .error-icon {
+      color: #dc3545;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Slapture</h1>
+
+    <div class="input-group">
+      <input
+        type="text"
+        id="captureInput"
+        placeholder="Enter capture (e.g., dump: hello world)"
+        autofocus
+      >
+      <button id="submitBtn" onclick="submitCapture()">Send</button>
+    </div>
+
+    <div id="status" class="status hidden">
+      <div id="step-parse" class="status-step">
+        <span class="icon"></span>
+        <span>Parsing...</span>
+      </div>
+      <div id="step-dispatch" class="status-step">
+        <span class="icon"></span>
+        <span>Matching route...</span>
+      </div>
+      <div id="step-mastermind" class="status-step" style="display: none;">
+        <span class="icon"></span>
+        <span>Analyzing...</span>
+      </div>
+      <div id="step-execute" class="status-step">
+        <span class="icon"></span>
+        <span>Executing...</span>
+      </div>
+      <div id="step-result" class="status-step">
+        <span class="icon"></span>
+        <span class="result-text"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_TOKEN = new URLSearchParams(window.location.search).get('token') || 'dev-token';
+
+    const input = document.getElementById('captureInput');
+    const submitBtn = document.getElementById('submitBtn');
+    const statusDiv = document.getElementById('status');
+
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') submitCapture();
+    });
+
+    async function submitCapture() {
+      const text = input.value.trim();
+      if (!text) return;
+
+      submitBtn.disabled = true;
+      statusDiv.classList.remove('hidden');
+      resetStatus();
+
+      try {
+        // Submit capture
+        setStepActive('step-parse');
+        const response = await fetch(`/capture?token=${API_TOKEN}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to submit capture');
+        }
+
+        const { captureId } = await response.json();
+        setStepDone('step-parse');
+
+        // Poll for status
+        await pollStatus(captureId);
+
+        // Clear input on success
+        input.value = '';
+
+      } catch (error) {
+        setStepError('step-result', error.message);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    }
+
+    async function pollStatus(captureId) {
+      const maxAttempts = 30;
+      let attempts = 0;
+
+      while (attempts < maxAttempts) {
+        const response = await fetch(`/status/${captureId}?token=${API_TOKEN}`);
+        const capture = await response.json();
+
+        // Update UI based on execution trace
+        const trace = capture.executionTrace || [];
+
+        if (trace.some(t => t.step === 'parse')) {
+          setStepDone('step-parse');
+        }
+
+        if (trace.some(t => t.step === 'dispatch')) {
+          setStepActive('step-dispatch');
+          const dispatchStep = trace.find(t => t.step === 'dispatch');
+          if (dispatchStep?.output?.routeId) {
+            document.querySelector('#step-dispatch span:last-child').textContent =
+              `Matched: ${dispatchStep.output.routeId}`;
+          }
+          setStepDone('step-dispatch');
+        }
+
+        if (trace.some(t => t.step === 'mastermind')) {
+          document.getElementById('step-mastermind').style.display = 'flex';
+          setStepActive('step-mastermind');
+          const mmStep = trace.find(t => t.step === 'mastermind');
+          if (mmStep?.output?.action === 'create') {
+            document.querySelector('#step-mastermind span:last-child').textContent =
+              'Creating new route...';
+          }
+          setStepDone('step-mastermind');
+        }
+
+        if (trace.some(t => t.step === 'execute')) {
+          setStepActive('step-execute');
+        }
+
+        // Check final status
+        if (capture.executionResult === 'success') {
+          setStepDone('step-execute');
+          setStepDone('step-result', `Sent to ${capture.routeFinal || 'destination'}`);
+          return;
+        } else if (capture.executionResult === 'failed') {
+          setStepError('step-execute');
+          setStepError('step-result', 'Failed');
+          return;
+        } else if (capture.executionResult === 'rejected') {
+          setStepDone('step-execute');
+          setStepDone('step-result', 'Sent to inbox');
+          return;
+        }
+
+        attempts++;
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      setStepError('step-result', 'Timeout waiting for result');
+    }
+
+    function resetStatus() {
+      ['step-parse', 'step-dispatch', 'step-mastermind', 'step-execute', 'step-result'].forEach(id => {
+        const el = document.getElementById(id);
+        el.className = 'status-step';
+        el.querySelector('.icon').innerHTML = '';
+        if (id === 'step-mastermind') el.style.display = 'none';
+      });
+      document.querySelector('#step-dispatch span:last-child').textContent = 'Matching route...';
+      document.querySelector('#step-mastermind span:last-child').textContent = 'Analyzing...';
+      document.querySelector('#step-result .result-text').textContent = '';
+    }
+
+    function setStepActive(stepId) {
+      const el = document.getElementById(stepId);
+      el.className = 'status-step active';
+      el.querySelector('.icon').innerHTML = '<div class="spinner"></div>';
+    }
+
+    function setStepDone(stepId, text) {
+      const el = document.getElementById(stepId);
+      el.className = 'status-step done';
+      el.querySelector('.icon').innerHTML = '&#10003;';
+      if (text) {
+        el.querySelector('span:last-child').textContent = text;
+      }
+    }
+
+    function setStepError(stepId, text) {
+      const el = document.getElementById(stepId);
+      el.className = 'status-step error';
+      el.querySelector('.icon').innerHTML = '&#10007;';
+      if (text) {
+        el.querySelector('span:last-child').textContent = text;
+      }
+    }
+  </script>
+</body>
+</html>
