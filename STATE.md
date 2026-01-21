@@ -4,24 +4,24 @@
 Phase 1: Initial Implementation
 
 ## Status
-🚧 Ready to implement - Plan written
+🚧 Implementing - Task 7 in review
 
 ## Completed
 - [x] Set up Claude Code permissions
 - [x] Created STATE.md
 - [x] Brainstorming and spec refinement
 - [x] Implementation plan written (docs/plans/2026-01-21-slapture-phase1.md)
+- [x] Task 1: Project Scaffolding (e5138ec)
+- [x] Task 2: Storage Layer (ec3148a)
+- [x] Task 3: Parser Module (3816167)
+- [x] Task 4: Dispatcher Module (290d5b2)
+- [x] Task 5: Route Executor (e6b3aa8)
+- [x] Task 6: Mastermind Integration (69d01be)
 
 ## In Progress
-- [ ] Task 1: Project Scaffolding
+- [ ] Task 7: Capture Pipeline - implementation done (0db322f), awaiting spec/code review
 
-## Next Up (from plan)
-- [ ] Task 2: Storage Layer
-- [ ] Task 3: Parser Module
-- [ ] Task 4: Dispatcher Module
-- [ ] Task 5: Route Executor (Transform Scripts)
-- [ ] Task 6: Mastermind Integration
-- [ ] Task 7: Capture Pipeline (Orchestration)
+## Next Up
 - [ ] Task 8: HTTP Server
 - [ ] Task 9: Web Widget
 - [ ] Task 10: Seed Routes for Testing
