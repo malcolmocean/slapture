@@ -1,10 +1,10 @@
 # Slapture Implementation State
 
 ## Current Phase
-Phase 1: Initial Implementation
+Phase 1: Initial Implementation - COMPLETE
 
 ## Status
-🚧 Implementing - Task 8 in progress
+✅ Phase 1 Complete
 
 ## Completed
 - [x] Set up Claude Code permissions
@@ -17,16 +17,37 @@ Phase 1: Initial Implementation
 - [x] Task 4: Dispatcher Module (290d5b2)
 - [x] Task 5: Route Executor (e6b3aa8)
 - [x] Task 6: Mastermind Integration (69d01be)
-- [x] Task 7: Capture Pipeline (0db322f) - reviewed and approved
+- [x] Task 7: Capture Pipeline (0db322f)
+- [x] Task 8: HTTP Server (ac25e76)
+- [x] Task 9: Web Widget (d3471a6)
+- [x] Task 10: Seed Routes for Testing (2d99be1)
+- [x] Task 11: Playwright E2E Tests (4b727d1)
+- [x] Task 12: Final Integration and Cleanup
 
-## In Progress
-- [ ] Task 8: HTTP Server
+## Phase 1 Summary
 
-## Next Up
-- [ ] Task 9: Web Widget
-- [ ] Task 10: Seed Routes for Testing
-- [ ] Task 11: Playwright E2E Tests
-- [ ] Task 12: Final Integration and Cleanup
+### What's Built
+1. **Storage layer** - File-based CRUD for captures, routes, config
+2. **Parser** - Extracts explicit routes, hashtags, metadata
+3. **Dispatcher** - Matches triggers by prefix, regex, keyword
+4. **Route Executor** - Runs transformScripts in node:vm with sandboxed fs
+5. **Mastermind** - Anthropic API integration for novel inputs
+6. **Capture Pipeline** - Orchestrates the full flow
+7. **HTTP Server** - Fastify with /capture, /status, /routes, /captures, /widget
+8. **Web Widget** - Clean UI with progressive status updates
+9. **Tests** - 37 unit tests, 8 E2E tests
+
+### How to Run
+```bash
+pnpm seed                           # Set up initial routes
+ANTHROPIC_API_KEY=... pnpm start    # Start server on port 3000
+# Visit http://localhost:3000/widget?token=dev-token
+```
+
+## Next Up (Phase 2)
+- OAuth / real integrations
+- Dashboard UI for reviewing captures
+- LLM validation at route level
 
 ## Design Decisions (from brainstorming)
 - **API key**: ANTHROPIC_API_KEY environment variable
