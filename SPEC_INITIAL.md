@@ -37,7 +37,7 @@ This spec covers Phase 1: a working end-to-end system with dummy destinations, e
          │
          ▼
 ┌─────────────────┐
-│  Destination    │  Phase 1: write-to-file, post-to-url
+│  Destination    │  Phase 1: filesystem operations (filestore/username/)
 └─────────────────┘
 
 ┌─────────────────┐
@@ -116,9 +116,13 @@ interface Route {
   recentItems: CaptureRef[];       // last N items sent here (for few-shot)
   
   // Execution
-  destinationType: 'write-to-file' | 'post-to-url';  // Phase 1 only
-  destinationConfig: Record<string, any>;
-  transformScript: string | null;  // optional JS to transform payload before send
+  destinationType: 'fs';  // filesystem operations only
+  destinationConfig: {
+    filePath: string;  // relative to filestore/username/
+  };
+  transformScript: string | null;  // JS (node:vm) that performs fs operations and transforms
+                                   // Has access to: fs, payload, filePath, timestamp, metadata
+                                   // Mastermind builds whatever abstractions needed here
   
   // Metadata
   createdAt: string;
@@ -148,6 +152,15 @@ In Phase 1, the Mastermind is Opus called via Anthropic API (not Claude Code). I
 2. **Rejections**: Route handler says "this doesn't fit my schema"
 3. **Rule generation**: Creates new RouteTriggers or even new Routes
 4. **Ambiguity resolution**: When input could match multiple routes
+
+**API Configuration:**
+- Uses ANTHROPIC_API_KEY environment variable
+- On API failure: writes to slapture-inbox fallback file and schedules auto-retry
+
+**Route Creation Flow:**
+- Default: Create route and immediately execute the capture through it
+- Optional setting `requireApproval`: if true, new routes go to pending state
+  - Can include `approvalGuardPrompt`: AI assesses whether to wait for human approval based on this prompt
 
 The Mastermind prompt should include:
 - All existing routes (names, descriptions, triggers, recent items)
@@ -206,26 +219,22 @@ If validation fails, capture is rejected back to Mastermind with reason.
 
 ### Destinations (Phase 1)
 
-**write-to-file**:
-```typescript
-config: {
-  directory: string;  // e.g., "./captures/weightlog"
-  filenamePattern: string;  // e.g., "{date}.txt" or "{id}.json"
-  format: 'raw' | 'json';
-}
-```
+**Filesystem as API**: The only destination type is `fs` - filesystem operations. All files are scoped to `filestore/{username}/` directory.
 
-**post-to-url**:
-```typescript
-config: {
-  url: string;
-  method: 'POST' | 'PUT';
-  headers: Record<string, string>;
-  bodyTemplate: string;  // e.g., '{"text": "{payload}", "timestamp": "{timestamp}"}'
-}
-```
+The `transformScript` (running in node:vm) has access to:
+- `fs`: Node.js fs module (sync operations for simplicity)
+- `payload`: The parsed capture payload
+- `filePath`: The configured file path (relative to filestore/username/)
+- `timestamp`: ISO 8601 timestamp of capture
+- `metadata`: Any extracted metadata from parser
 
-For testing post-to-url, include a tiny echo server that logs received posts.
+The **Mastermind builds whatever abstractions it needs** in the transformScript. Examples:
+- Append to text file: `fs.appendFileSync(filePath, payload + '\n')`
+- Update JSON map: read file, parse, update key, write back
+- Append to CSV: parse existing, add row, write back
+- Update CSV row: read, find & update row, write back
+
+This gives the Mastermind full flexibility to create the exact operations needed for each route, treating filesystem like an API/SDK.
 
 ### Storage (File-based)
 
@@ -238,6 +247,20 @@ For testing post-to-url, include a tiny echo server that logs received posts.
   /executions
     /{captureId}-trace.json # detailed execution traces
   /config.json              # auth tokens, settings
+  /slapture-inbox.txt       # fallback for failed/unclear captures
+/filestore
+  /{username}               # user's filesystem scope
+    /...                    # whatever files the routes create/modify
+```
+
+**config.json structure:**
+```typescript
+{
+  authToken: string;
+  requireApproval: boolean;           // wait for approval on new routes
+  approvalGuardPrompt: string | null; // AI assesses if approval needed
+  mastermindRetryAttempts: number;    // auto-retry count for API failures
+}
 ```
 
 This structure makes it easy for Claude Code (in later phases) to inspect and modify data.
@@ -254,7 +277,7 @@ Single-page HTML/JS that:
    - "Executing..."
    - "✓ Sent to {routeName}" or "✗ Failed: {reason}"
 
-Minimal styling. This will eventually be embedded in Android WebView.
+**Styling:** Clean and minimal - simple CSS, readable and functional but not fancy. This will eventually be embedded in Android WebView.
 
 No notifications, no red dots, no historical data. Just current capture status.
 
@@ -265,42 +288,42 @@ These examples define expected behavior. Implement as Playwright tests.
 ### Example Set A: Basic routing with explicit hints
 
 Setup: Two routes pre-configured
-- Route "dump" with trigger prefix "dump:", destination write-to-file in ./captures/dump/
-- Route "echo" with trigger prefix "echo:", destination post-to-url to local echo server
+- Route "dump" with trigger prefix "dump:", filePath "dump.txt", transformScript: `fs.appendFileSync(filePath, payload + '\n')`
+- Route "note" with trigger prefix "note:", filePath "notes.json", transformScript that reads, parses, updates JSON map, writes back
 
 ```
 Input: "dump: this is a test"
 Expected:
   - Parser: explicitRoute="dump", payload="this is a test"
   - Dispatcher: proposes "dump" (high confidence)
-  - Execution: writes to ./captures/dump/{id}.txt containing "this is a test"
+  - Execution: transformScript appends "this is a test\n" to filestore/{username}/dump.txt
   - Status: success
 ```
 
 ```
-Input: "echo: hello world"
+Input: "note: remember to check logs"
 Expected:
-  - Parser: explicitRoute="echo", payload="hello world"
-  - Dispatcher: proposes "echo" (high confidence)
-  - Execution: POSTs to echo server
-  - Echo server receives: {"text": "hello world", "timestamp": "..."}
+  - Parser: explicitRoute="note", payload="remember to check logs"
+  - Dispatcher: proposes "note" (high confidence)
+  - Execution: transformScript updates filestore/{username}/notes.json
   - Status: success
 ```
 
 ### Example Set B: No match → Mastermind
 
-Setup: Same two routes, no pattern for "weight" yet
+Setup: Same two routes from Example Set A, no pattern for "weight" yet
 
 ```
 Input: "weight 88.2kg"
 Expected:
   - Parser: explicitRoute=null, payload="weight 88.2kg"
   - Dispatcher: no trigger match → Mastermind
-  - Mastermind: sees available routes, recognizes this doesn't fit either
+  - Mastermind: sees available routes, recognizes this doesn't fit any
   - Mastermind: creates new route "weightlog" with:
     - trigger: regex /^weight\s+[\d.]+\s*(kg|lbs?|lb)?$/i
-    - destination: write-to-file in ./captures/weightlog/
-  - Execution: writes to ./captures/weightlog/{date}.txt
+    - filePath: "weightlog.csv"
+    - transformScript: parses payload, reads CSV, appends new row with [timestamp, value, unit]
+  - Execution: transformScript creates/appends to filestore/{username}/weightlog.csv
   - Status: success
 ```
 
@@ -309,7 +332,7 @@ Input: "weight 88.1kg"  (second time, route exists)
 Expected:
   - Dispatcher: matches "weightlog" route (high confidence)
   - No Mastermind needed
-  - Execution: appends to ./captures/weightlog/{date}.txt
+  - Execution: transformScript appends new row to filestore/{username}/weightlog.csv
   - Status: success
 ```
 
@@ -348,12 +371,12 @@ Expected sequence:
 ### Example Set E: Execution failure
 
 ```
-Setup: Route "echo" pointing to URL that's down
+Setup: Route "dump" with transformScript that tries to write outside filestore/{username}/
 
-Input: "echo: test"
+Input: "dump: test"
 Expected:
-  - Dispatcher: matches "echo"
-  - Execution: POST fails
+  - Dispatcher: matches "dump"
+  - Execution: transformScript fails (path validation error)
   - ExecutionTrace: includes error details
   - Status: failed
   - Capture stays in system with failed state for later retry/debug
@@ -406,7 +429,8 @@ Respond with JSON only.
 
 - All errors logged with full context
 - Captures never disappear—failed state is explicit
-- Mastermind failures → capture goes to slapture inbox with error context
+- Mastermind API failures → capture goes to slapture-inbox.txt with error context and schedules auto-retry (respects mastermindRetryAttempts config)
+- Transform scripts run in node:vm for basic sandboxing (trusted code for Phase 1, security improvements in later phases)
 
 ### File Watching (Optional Enhancement)
 
@@ -430,12 +454,16 @@ Phase 1 is complete when:
 1. [ ] HTTP server runs, accepts captures, serves widget
 2. [ ] Parser extracts explicit routes and basic metadata
 3. [ ] Dispatcher matches against configured triggers
-4. [ ] Two destinations work (write-to-file, post-to-url)
-5. [ ] Mastermind (Opus API) handles novel inputs and creates routes
-6. [ ] Widget shows progressive status updates
-7. [ ] All Example Sets A-E pass as Playwright tests
-8. [ ] Captures stored with full execution traces
-9. [ ] Verification states tracked (pending/success/failed for now)
+4. [ ] Filesystem destination works (fs operations in filestore/{username}/)
+5. [ ] Transform scripts execute in node:vm with access to fs, payload, filePath, timestamp, metadata
+6. [ ] Path validation enforces filestore/{username}/ scoping
+7. [ ] Mastermind (Opus API) handles novel inputs and creates routes with transformScripts
+8. [ ] Mastermind API failures write to slapture-inbox.txt and schedule retry
+9. [ ] Widget shows progressive status updates with clean, minimal styling
+10. [ ] All Example Sets A-E pass as Playwright tests
+11. [ ] Captures stored with full execution traces
+12. [ ] Verification states tracked (pending/success/failed for now)
+13. [ ] Config supports requireApproval and approvalGuardPrompt settings
 
 ## Reference
 
