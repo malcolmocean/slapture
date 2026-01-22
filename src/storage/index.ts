@@ -1,7 +1,7 @@
 // src/storage/index.ts
 import fs from 'fs';
 import path from 'path';
-import { Capture, Route, Config, ExecutionStep } from '../types.js';
+import { Capture, Route, Config, ExecutionStep, EvolverTestCase } from '../types.js';
 
 export class Storage {
   private dataDir: string;
@@ -176,5 +176,64 @@ export class Storage {
   async appendToInbox(entry: string): Promise<void> {
     const filePath = path.join(this.dataDir, 'slapture-inbox.txt');
     fs.appendFileSync(filePath, `${new Date().toISOString()}: ${entry}\n`);
+  }
+
+  // Evolver Test Cases
+  async saveEvolverTestCase(testCase: EvolverTestCase): Promise<void> {
+    const filePath = path.join(this.dataDir, 'evolver-tests', `${testCase.id}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(testCase, null, 2));
+  }
+
+  async getEvolverTestCase(id: string): Promise<EvolverTestCase | null> {
+    const filePath = path.join(this.dataDir, 'evolver-tests', `${id}.json`);
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return JSON.parse(content) as EvolverTestCase;
+  }
+
+  async listEvolverTestCases(): Promise<EvolverTestCase[]> {
+    const testsDir = path.join(this.dataDir, 'evolver-tests');
+    if (!fs.existsSync(testsDir)) {
+      return [];
+    }
+    const files = fs.readdirSync(testsDir).filter(f => f.endsWith('.json'));
+    const testCases: EvolverTestCase[] = [];
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(testsDir, file), 'utf-8');
+      testCases.push(JSON.parse(content) as EvolverTestCase);
+    }
+    return testCases;
+  }
+
+  async deleteEvolverTestCase(id: string): Promise<void> {
+    const filePath = path.join(this.dataDir, 'evolver-tests', `${id}.json`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+
+  /**
+   * Prune old non-ratchet test cases, keeping only the most recent N.
+   * Ratchet cases (where evolution happened) are never auto-deleted.
+   */
+  async pruneEvolverTestCases(keepRecent: number = 5): Promise<void> {
+    const allCases = await this.listEvolverTestCases();
+
+    // Separate ratchet cases (keep forever) from non-ratchet (rolling window)
+    const ratchetCases = allCases.filter(tc => tc.isRatchetCase);
+    const nonRatchetCases = allCases.filter(tc => !tc.isRatchetCase);
+
+    // Sort non-ratchet by timestamp, newest first
+    nonRatchetCases.sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    // Delete old non-ratchet cases beyond the limit
+    const toDelete = nonRatchetCases.slice(keepRecent);
+    for (const tc of toDelete) {
+      await this.deleteEvolverTestCase(tc.id);
+    }
   }
 }

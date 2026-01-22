@@ -68,12 +68,16 @@ If the input is ambiguous between reasonable interpretations, choose "clarify".
 Respond with JSON only.`;
   }
 
+  /**
+   * Consult the Mastermind about routing a capture.
+   * Returns the action along with the prompt used for retroactive replay.
+   */
   async consult(
     routes: Route[],
     raw: string,
     parsed: ParseResult,
     dispatcherReason: string
-  ): Promise<MastermindAction> {
+  ): Promise<{ action: MastermindAction; promptUsed: string }> {
     const prompt = this.buildPrompt(routes, raw, parsed, dispatcherReason);
 
     try {
@@ -86,16 +90,25 @@ Respond with JSON only.`;
       const content = response.content[0];
       if (content.type !== 'text') {
         return {
-          action: 'inbox',
-          reason: 'Unexpected response type from API',
+          action: {
+            action: 'inbox',
+            reason: 'Unexpected response type from API',
+          },
+          promptUsed: prompt,
         };
       }
 
-      return this.parseResponse(content.text);
+      return {
+        action: this.parseResponse(content.text),
+        promptUsed: prompt,
+      };
     } catch (error) {
       return {
-        action: 'inbox',
-        reason: `API error: ${error instanceof Error ? error.message : String(error)}`,
+        action: {
+          action: 'inbox',
+          reason: `API error: ${error instanceof Error ? error.message : String(error)}`,
+        },
+        promptUsed: prompt,
       };
     }
   }

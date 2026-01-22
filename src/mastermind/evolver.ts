@@ -98,7 +98,11 @@ ${validationFailure.otherRoutesTriggers.map(r =>
     return prompt;
   }
 
-  async evolve(context: EvolverContext): Promise<EvolverResult> {
+  /**
+   * Evolve a route's triggers/transform.
+   * Returns the result along with the prompt used for retroactive replay.
+   */
+  async evolve(context: EvolverContext): Promise<{ result: EvolverResult; promptUsed: string }> {
     const prompt = this.buildPrompt(context);
 
     try {
@@ -111,16 +115,25 @@ ${validationFailure.otherRoutesTriggers.map(r =>
       const content = response.content[0];
       if (content.type !== 'text') {
         return {
-          action: 'failed',
-          reasoning: 'Unexpected response type from API',
+          result: {
+            action: 'failed',
+            reasoning: 'Unexpected response type from API',
+          },
+          promptUsed: prompt,
         };
       }
 
-      return this.parseResponse(content.text);
+      return {
+        result: this.parseResponse(content.text),
+        promptUsed: prompt,
+      };
     } catch (error) {
       return {
-        action: 'failed',
-        reasoning: `API error: ${error instanceof Error ? error.message : String(error)}`,
+        result: {
+          action: 'failed',
+          reasoning: `API error: ${error instanceof Error ? error.message : String(error)}`,
+        },
+        promptUsed: prompt,
       };
     }
   }

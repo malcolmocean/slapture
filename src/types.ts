@@ -117,3 +117,38 @@ export interface MastermindAction {
   question?: string;
   reason: string;
 }
+
+/**
+ * Test case for evolver prompt iteration.
+ * Saved automatically for:
+ * 1. Last 5 evolver calls (rolling window)
+ * 2. Any call that resulted in evolution (ratchet cases - never deleted)
+ */
+export interface EvolverTestCase {
+  id: string;
+  timestamp: string;
+
+  // The full context shown to evolver
+  input: {
+    newInput: string;
+    routeId: string;
+    routeName: string;
+    routeTriggers: RouteTrigger[];
+    routeDescription: string;
+    routeRecentItems: string[];
+    mastermindReason: string;
+  };
+
+  // What happened
+  expectedAction: 'skip' | 'evolved';
+  expectedTriggers?: RouteTrigger[];  // If evolved
+  actualResult: EvolverResult;
+
+  // For replay
+  promptUsed: string;
+  promptVersion: string;  // Hash of prompt template for detecting changes
+
+  // Classification
+  isRatchetCase: boolean;  // True if evolution happened - these are never auto-deleted
+  wasRegression: boolean;  // Did a prompt change break this?
+}

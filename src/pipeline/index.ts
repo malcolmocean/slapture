@@ -82,13 +82,17 @@ export class CapturePipeline {
       if (!route) {
         console.log(`[Pipeline] No route matched, consulting Mastermind for: "${raw}"`);
         const mastermindStart = Date.now();
-        const action = await this.mastermind.consult(
+        const { action, promptUsed } = await this.mastermind.consult(
           routes,
           raw,
           parsed,
           dispatchResult.reason
         );
-        this.addTrace(capture, 'mastermind', { raw, parsed, reason: dispatchResult.reason }, action, mastermindStart);
+        // Store both the dynamic input context and the full prompt for retroactive replay
+        this.addTrace(capture, 'mastermind', {
+          dynamicInput: { raw, parsed, dispatcherReason: dispatchResult.reason, routeCount: routes.length },
+          staticPrompt: promptUsed,
+        }, action, mastermindStart);
         console.log(`[Pipeline] Mastermind action: ${action.action}`, action.routeId || action.route?.name || '');
 
         if (action.action === 'route' && action.routeId) {
@@ -99,7 +103,7 @@ export class CapturePipeline {
 
           // Evolver fires when Mastermind routes to existing
           if (route) {
-            const evolvedRoute = await this.tryEvolveRoute(route, raw, action.reason, routes);
+            const evolvedRoute = await this.tryEvolveRoute(capture, route, raw, action.reason, routes);
             if (evolvedRoute) {
               route = evolvedRoute;
               // Update dispatcher with evolved route
@@ -199,6 +203,7 @@ export class CapturePipeline {
    * Returns the updated route if evolution succeeded, null otherwise.
    */
   private async tryEvolveRoute(
+    capture: Capture,
     route: Route,
     newInput: string,
     mastermindReason: string,
@@ -212,19 +217,30 @@ export class CapturePipeline {
     };
 
     const allCaptures = await this.storage.listAllCaptures();
+    const evolverStart = Date.now();
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       console.log(`[Pipeline] Evolver attempt ${attempt}/${MAX_RETRIES} for route ${route.name}`);
 
-      const result = await this.evolver.evolve(context);
+      const { result, promptUsed } = await this.evolver.evolve(context);
       console.log(`[Pipeline] Evolver result: ${result.action} - ${result.reasoning}`);
 
       if (result.action === 'skipped') {
+        // Add trace for skipped evolution
+        this.addTrace(capture, 'evolve', {
+          dynamicInput: { newInput, routeId: route.id, routeName: route.name, mastermindReason, attempt },
+          staticPrompt: promptUsed,
+        }, { ...result, validationPassed: null, retriesUsed: attempt }, evolverStart);
         console.log(`[Pipeline] Evolver skipped evolution: ${result.reasoning}`);
         return null;
       }
 
       if (result.action === 'failed') {
+        // Add trace for failed evolution
+        this.addTrace(capture, 'evolve', {
+          dynamicInput: { newInput, routeId: route.id, routeName: route.name, mastermindReason, attempt },
+          staticPrompt: promptUsed,
+        }, { ...result, validationPassed: null, retriesUsed: attempt }, evolverStart);
         console.log(`[Pipeline] Evolver failed: ${result.reasoning}`);
         return null;
       }
@@ -242,6 +258,11 @@ export class CapturePipeline {
         // Apply changes
         const updatedRoute = this.applyEvolution(route, result, newInput);
         await this.storage.saveRoute(updatedRoute);
+        // Add trace for successful evolution
+        this.addTrace(capture, 'evolve', {
+          dynamicInput: { newInput, routeId: route.id, routeName: route.name, mastermindReason, attempt },
+          staticPrompt: promptUsed,
+        }, { ...result, validationPassed: true, retriesUsed: attempt }, evolverStart);
         console.log(`[Pipeline] Evolution applied to route ${route.name}`);
         return updatedRoute;
       }
@@ -263,7 +284,11 @@ export class CapturePipeline {
       };
     }
 
-    // All retries exhausted
+    // All retries exhausted - add trace
+    this.addTrace(capture, 'evolve', {
+      dynamicInput: { newInput, routeId: route.id, routeName: route.name, mastermindReason, attempt: MAX_RETRIES },
+      staticPrompt: '(see previous attempts)',
+    }, { action: 'failed', reasoning: 'All retries exhausted', validationPassed: false, retriesUsed: MAX_RETRIES }, evolverStart);
     console.log(`[Pipeline] Evolver exhausted all retries for route ${route.name}`);
     return null;
   }
