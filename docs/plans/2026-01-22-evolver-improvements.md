@@ -52,44 +52,42 @@
 
 - [x] **Migration script** - Created `scripts/migrate-captures.ts` to move existing captures into `default/` subdirectory with new naming. Ran successfully on 31 captures.
 
-### Phase 2: LLM Input Tracing (TODO)
+### Phase 2: LLM Input Tracing (DONE)
 
-- [ ] **Store LLM inputs in execution trace** - For each LLM call (Mastermind, Evolver), store:
+- [x] **Store LLM inputs in execution trace** - For each LLM call (Mastermind, Evolver), store:
   - `staticPrompt`: The full prompt template as it existed at call time
   - `dynamicInput`: The specific data that was interpolated (routes, recent items, new input, etc.)
   - This enables retroactive replay when prompts change
 
-- [ ] **Add evolver step to execution trace** - Currently evolver only logs to console. Need to call `addTrace(capture, 'evolve', ...)` in `tryEvolveRoute()` with full context including:
+- [x] **Add evolver step to execution trace** - Now calls `addTrace(capture, 'evolve', ...)` in `tryEvolveRoute()` with full context including:
   - Input: route being evolved, new input, mastermind reason
   - Output: evolver result (action, triggers, transform, reasoning)
   - The prompt shown to the LLM
 
+- [x] **EvolverTestCase infrastructure** - Added type and storage methods (save, list, delete, prune)
+
 ### Phase 3: Test Ratcheting System (TODO)
 
-- [ ] **Evolver test case storage** - Create `data/evolver-tests/` directory (already added to `ensureDirectories`). Store test cases as JSON with:
-  ```typescript
-  interface EvolverTestCase {
-    id: string;
-    timestamp: string;
-    input: EvolverContext;        // The full context shown to evolver
-    expectedAction: 'skip' | 'evolved';
-    expectedTriggers?: RouteTrigger[];  // If evolved
-    actualResult: EvolverResult;
-    promptVersion: string;        // Hash or timestamp of prompt used
-    wasRegression: boolean;       // Did a prompt change break this?
-  }
-  ```
+- [x] **Evolver test case storage** - `data/evolver-tests/` directory exists. `EvolverTestCase` type defined in types.ts with storage methods in storage/index.ts.
 
 - [ ] **Auto-save test cases** - When evolver runs:
-  1. Always save the last 5 evolver calls as test cases
-  2. If evolver produced a modification (action='evolved'), mark it as a "ratchet case" that should always be tested
+  1. Always save the evolver call as a test case with `isRatchetCase: false`
+  2. Prune to keep only the last 5 non-ratchet cases (rolling window)
+
+- [ ] **Ratchet cases** - Manually added by developers when fixing the evolver prompt:
+  1. When evolver misbehaves, developer fixes the prompt
+  2. Developer adds that specific input as a test case with `isRatchetCase: true`
+  3. Ratchet cases are never auto-deleted
 
 - [ ] **Test runner for prompt iteration** - When updating the evolver prompt:
-  1. Run all ratchet cases through new prompt
+  1. Run all test cases (last 5 auto-saved + all ratchet cases) through new prompt
   2. Verify no regressions (cases that should skip still skip, cases that should evolve still evolve)
-  3. Report any failures before allowing commit
+  3. Report any failures
 
-- [ ] **Prominent note in evolver.ts** - Add comment block explaining the test ratchet system and requirement to add failed cases when modifying the prompt
+- [ ] **Prominent note in evolver.ts** - Add comment block explaining:
+  - The test ratchet system
+  - When modifying the prompt, add the failing input as a ratchet case
+  - Run test runner before committing prompt changes
 
 ### Phase 4: Future Optimizations (DEFERRED)
 
@@ -109,3 +107,4 @@
 ## Commit History
 
 1. `9ccb972` - feat: conservative evolver + captures restructure (Phase 1 complete)
+2. `0e35177` - feat: add LLM input tracing and evolver test case infrastructure (Phase 2 complete)
