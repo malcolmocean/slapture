@@ -439,4 +439,67 @@ export class CapturePipeline {
     // Prune to keep only last 5 non-ratchet cases
     await this.storage.pruneEvolverTestCases(5);
   }
+
+  /**
+   * Retry a previously blocked capture (e.g., after OAuth is configured).
+   */
+  async retryCapture(capture: Capture): Promise<{ capture: Capture }> {
+    // Re-execute with existing route
+    const route = await this.storage.getRoute(capture.routeFinal!);
+    if (!route) {
+      capture.executionResult = 'failed';
+      capture.executionTrace.push({
+        step: 'execute',
+        timestamp: new Date().toISOString(),
+        input: { retryAttempt: true },
+        output: { error: 'Route no longer exists' },
+        codeVersion: this.codeVersion,
+        durationMs: 0
+      });
+      await this.storage.saveCapture(capture, 'default');
+      return { capture };
+    }
+
+    const startTime = Date.now();
+    const result = await this.executor.execute(
+      route,
+      capture.parsed?.payload || capture.raw,
+      'default',
+      capture.parsed?.metadata || {},
+      capture.timestamp,
+      capture
+    );
+
+    // Map the result status to execution result
+    if (result.status === 'blocked_needs_auth' || result.status === 'blocked_auth_expired') {
+      capture.executionResult = result.status;
+    } else if (result.success) {
+      capture.executionResult = 'success';
+    } else {
+      capture.executionResult = 'failed';
+    }
+
+    capture.executionTrace.push({
+      step: 'execute',
+      timestamp: new Date().toISOString(),
+      input: { route: route.id, payload: capture.parsed?.payload, retryAttempt: true },
+      output: result,
+      codeVersion: this.codeVersion,
+      durationMs: Date.now() - startTime
+    });
+
+    await this.storage.saveCapture(capture, 'default');
+
+    if (result.success) {
+      // Update route's recentItems
+      route.recentItems = [
+        { captureId: capture.id, raw: capture.raw, timestamp: capture.timestamp, wasCorrect: true },
+        ...route.recentItems.slice(0, 4)
+      ];
+      route.lastUsed = capture.timestamp;
+      await this.storage.saveRoute(route);
+    }
+
+    return { capture };
+  }
 }

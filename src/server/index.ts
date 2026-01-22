@@ -107,6 +107,38 @@ export async function buildServer(
     return storage.listCaptures(limit);
   });
 
+  // GET /captures/blocked - List blocked captures
+  server.get<{
+    Querystring: { token: string };
+  }>('/captures/blocked', async () => {
+    return storage.listCapturesNeedingAuth();
+  });
+
+  // POST /retry/:captureId - Retry a blocked capture
+  server.post<{
+    Params: { captureId: string };
+    Querystring: { token: string };
+  }>('/retry/:captureId', async (request, reply) => {
+    const { captureId } = request.params;
+
+    const capture = await storage.getCapture(captureId);
+    if (!capture) {
+      return reply.code(404).send({ error: 'Capture not found' });
+    }
+
+    if (capture.executionResult !== 'blocked_needs_auth' &&
+        capture.executionResult !== 'blocked_auth_expired') {
+      return reply.code(400).send({
+        error: 'Capture is not blocked',
+        currentStatus: capture.executionResult
+      });
+    }
+
+    // Re-execute through pipeline
+    const result = await pipeline.retryCapture(capture);
+    return { capture: result.capture };
+  });
+
   // GET /widget - Serve web widget
   server.get('/widget', async (request, reply) => {
     // Look for widget in src/ (source) since HTML isn't compiled
