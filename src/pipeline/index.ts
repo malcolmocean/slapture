@@ -123,14 +123,14 @@ export class CapturePipeline {
         } else if (action.action === 'clarify') {
           capture.executionResult = 'pending';
           capture.verificationState = 'pending';
-          await this.storage.saveCapture(capture);
+          await this.storage.saveCapture(capture, username);
           return { capture, needsClarification: action.question };
         } else {
           // Send to inbox
           await this.storage.appendToInbox(`${capture.id}: ${raw} - ${action.reason}`);
           capture.executionResult = 'rejected';
           capture.verificationState = 'ai_uncertain';
-          await this.storage.saveCapture(capture);
+          await this.storage.saveCapture(capture, username);
           return { capture };
         }
       }
@@ -165,14 +165,14 @@ export class CapturePipeline {
         }
       }
 
-      await this.storage.saveCapture(capture);
+      await this.storage.saveCapture(capture, username);
       return { capture };
 
     } catch (error) {
       capture.executionResult = 'failed';
       capture.verificationState = 'failed';
       this.addTrace(capture, 'execute', {}, { error: String(error) }, Date.now());
-      await this.storage.saveCapture(capture);
+      await this.storage.saveCapture(capture, username);
       return { capture };
     }
   }

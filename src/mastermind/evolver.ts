@@ -31,7 +31,18 @@ export class Evolver {
       .map(item => `  - "${item.raw}"`)
       .join('\n');
 
-    let prompt = `You are the Slapture Evolver. Your job is to evolve a route's triggers and/or transform to handle new input variations.
+    let prompt = `You are the Slapture Evolver. Your job is to CONSERVATIVELY evolve a route's triggers and/or transform.
+
+## CRITICAL: Default to "skip"
+
+Your default action should be "skip". Only evolve when the new input represents a CLEAR, OBVIOUS pattern that should ALWAYS match this route. Ask yourself: "Is there any reasonable interpretation where this input should NOT go to this route?" If yes, skip.
+
+DO NOT overfit. The Mastermind already routed this correctly - you don't need to "capture" every variation. Only add patterns for:
+1. Clear typos/spacing variants of existing triggers (e.g., "gwenmemory" → "gwen memory")
+2. Obvious synonyms that will ALWAYS mean the same thing
+3. Structural patterns where the STRUCTURE itself guarantees the intent
+
+If the input is just "something that could go here this time", that's the Mastermind's job - NOT a trigger.
 
 ## Current Route: ${route.name}
 Description: ${route.description}
@@ -52,28 +63,19 @@ ${recentItems || '(none)'}
 ${mastermindReason}
 
 ## Your Task
-Analyze whether the triggers and/or transform need modification to handle this input pattern going forward.
-
-Guidelines:
-- Only modify what's necessary
-- Prefer regex patterns that handle variations (singular/plural, spacing, etc.)
-- Keep patterns specific enough to avoid matching unrelated inputs
-- If the input is a typo or one-off, you can skip evolution
+Decide if this input reveals an OBVIOUS, ALWAYS-CORRECT pattern that's missing from triggers. Most of the time, the answer is NO - the Mastermind handled it, that's fine.
 
 ## Response Format
-Respond with JSON only. Include only the sections being modified:
+Respond with JSON only:
 
-If modifying triggers only:
-{"triggers": [{type, pattern, priority}, ...], "reasoning": "..."}
+DEFAULT (use this most of the time):
+{"action": "skip", "reasoning": "The input was correctly routed by Mastermind but doesn't represent a universal pattern - [explain why it's situational]"}
 
-If modifying transform only:
-{"transform": "...", "reasoning": "..."}
+ONLY if clearly missing an obvious pattern:
+{"triggers": [{type, pattern, priority}, ...], "reasoning": "Adding [specific pattern] because it will ALWAYS mean this route: [concrete explanation]"}
 
-If modifying both:
-{"triggers": [...], "transform": "...", "reasoning": "..."}
-
-If skipping (typo, not worth capturing):
-{"action": "skip", "reasoning": "..."}`;
+If modifying transform (rare):
+{"transform": "...", "reasoning": "..."}`;
 
     // Add validation failure context on retry
     if (validationFailure) {
