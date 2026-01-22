@@ -667,3 +667,7 @@ For foundational architecture and rationale, see the design conversation: ORIGIN
 For Phase 1 implementation details, see SPEC_INITIAL.md.
 
 For tmux/Claude Code orchestration pattern, see: https://github.com/KyleHerndon/opus-orchestra/
+
+## Other ideas/todos
+
+- [ ] At some point we'll need to make sure we use user's timezone for today's date, and maybe also smart dates where 1am friday night is still friday not "uhh ackshully it's saturday morning"
