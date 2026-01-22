@@ -124,4 +124,4 @@ The current `dynamicInput` stored in traces is incomplete for true retroactive r
 
 1. `9ccb972` - feat: conservative evolver + captures restructure (Phase 1 complete)
 2. `0e35177` - feat: add LLM input tracing and evolver test case infrastructure (Phase 2 complete)
-3. (pending) - feat: add evolver test ratcheting system (Phase 3 complete)
+3. `151b1ae` - feat: add evolver test ratcheting system (Phase 3 complete)
