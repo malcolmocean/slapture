@@ -1,5 +1,7 @@
 // src/routes/executor.ts
-import { Route } from '../types.js';
+import { Route, Capture } from '../types.js';
+import { Storage } from '../storage/index.js';
+import { IntendExecutor } from './intend-executor.js';
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
@@ -7,13 +9,18 @@ import vm from 'vm';
 export interface ExecutionResult {
   success: boolean;
   error?: string;
+  status?: 'success' | 'failed' | 'blocked_needs_auth' | 'blocked_auth_expired';
 }
 
 export class RouteExecutor {
   private filestoreRoot: string;
+  private storage: Storage | null;
+  private intendExecutor: IntendExecutor | null;
 
-  constructor(filestoreRoot: string = './filestore') {
+  constructor(filestoreRoot: string = './filestore', storage?: Storage) {
     this.filestoreRoot = filestoreRoot;
+    this.storage = storage || null;
+    this.intendExecutor = storage ? new IntendExecutor(storage) : null;
   }
 
   async execute(
@@ -21,12 +28,31 @@ export class RouteExecutor {
     payload: string,
     username: string,
     metadata: Record<string, string>,
-    timestamp?: string
+    timestamp?: string,
+    capture?: Capture
   ): Promise<ExecutionResult> {
-    // Only handle 'fs' destination type in this executor
+    // Handle intend destination type
+    if (route.destinationType === 'intend') {
+      if (!this.intendExecutor || !capture) {
+        return {
+          success: false,
+          status: 'failed',
+          error: 'IntendExecutor not configured or capture not provided',
+        };
+      }
+      const intendResult = await this.intendExecutor.execute(route, capture);
+      return {
+        success: intendResult.status === 'success',
+        status: intendResult.status,
+        error: intendResult.error,
+      };
+    }
+
+    // Only handle 'fs' destination type below
     if (route.destinationType !== 'fs') {
       return {
         success: false,
+        status: 'failed',
         error: `Unsupported destination type: ${route.destinationType}`,
       };
     }

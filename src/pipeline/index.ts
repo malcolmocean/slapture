@@ -26,13 +26,13 @@ export class CapturePipeline {
   constructor(
     storage: Storage,
     filestoreRoot: string,
-    apiKey: string,
+    apiKey: string = '',
     codeVersion: string = 'dev'
   ) {
     this.storage = storage;
     this.parser = new Parser();
     this.dispatcher = new Dispatcher([]);
-    this.executor = new RouteExecutor(filestoreRoot);
+    this.executor = new RouteExecutor(filestoreRoot, storage);
     this.mastermind = new Mastermind(apiKey);
     this.evolver = new Evolver(apiKey);
     this.codeVersion = codeVersion;
@@ -160,11 +160,18 @@ export class CapturePipeline {
           parsed.payload,
           username,
           parsed.metadata,
-          capture.timestamp
+          capture.timestamp,
+          capture
         );
         this.addTrace(capture, 'execute', { route: route.id, payload: parsed.payload }, execResult, executeStart);
 
-        if (execResult.success) {
+        // Handle blocked states (OAuth required)
+        if (execResult.status === 'blocked_needs_auth' || execResult.status === 'blocked_auth_expired') {
+          capture.routeFinal = route.id;
+          capture.executionResult = execResult.status;
+          capture.verificationState = 'pending';
+          console.log(`[Pipeline] Execution blocked: ${execResult.status} - ${execResult.error}`);
+        } else if (execResult.success) {
           capture.routeFinal = route.id;
           capture.executionResult = 'success';
           capture.verificationState = capture.routeConfidence === 'high' ? 'ai_certain' : 'ai_uncertain';
