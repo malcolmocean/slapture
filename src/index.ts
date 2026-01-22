@@ -2,7 +2,7 @@
 import { buildServer } from './server/index.js';
 import { Storage } from './storage/index.js';
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = parseInt(process.env.PORT || '3333', 10);
 const DATA_DIR = process.env.DATA_DIR || './data';
 const FILESTORE_DIR = process.env.FILESTORE_DIR || './filestore';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;

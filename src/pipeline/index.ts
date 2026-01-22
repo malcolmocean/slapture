@@ -77,6 +77,7 @@ export class CapturePipeline {
 
       // If no route matched, consult Mastermind
       if (!route) {
+        console.log(`[Pipeline] No route matched, consulting Mastermind for: "${raw}"`);
         const mastermindStart = Date.now();
         const action = await this.mastermind.consult(
           routes,
@@ -85,9 +86,13 @@ export class CapturePipeline {
           dispatchResult.reason
         );
         this.addTrace(capture, 'mastermind', { raw, parsed, reason: dispatchResult.reason }, action, mastermindStart);
+        console.log(`[Pipeline] Mastermind action: ${action.action}`, action.routeId || action.route?.name || '');
 
         if (action.action === 'route' && action.routeId) {
-          route = await this.storage.getRoute(action.routeId);
+          // Mastermind returns route name, not ID - try both lookups
+          route = await this.storage.getRoute(action.routeId)
+            || await this.storage.getRouteByName(action.routeId);
+          console.log(`[Pipeline] Resolved route: ${route?.id || 'NOT FOUND'}`);
         } else if (action.action === 'create' && action.route) {
           // Create new route
           const newRoute: Route = {

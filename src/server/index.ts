@@ -10,14 +10,15 @@ export async function buildServer(
   filestoreRoot: string,
   apiKey: string
 ): Promise<FastifyInstance> {
-  const server = Fastify({ logger: false });
+  const server = Fastify({ logger: true });
 
   const pipeline = new CapturePipeline(storage, filestoreRoot, apiKey);
 
   // Auth hook
   server.addHook('onRequest', async (request, reply) => {
-    // Skip auth for widget
-    if (request.url === '/widget' || request.url.startsWith('/widget/')) {
+    // Skip auth for widget (request.url includes query string, so parse it)
+    const pathname = request.url.split('?')[0];
+    if (pathname === '/widget' || pathname.startsWith('/widget/')) {
       return;
     }
 
@@ -25,7 +26,7 @@ export async function buildServer(
     const config = await storage.getConfig();
 
     if (token !== config.authToken) {
-      reply.code(401).send({ error: 'Unauthorized' });
+      return reply.code(401).send({ error: 'Unauthorized' });
     }
   });
 
@@ -82,9 +83,10 @@ export async function buildServer(
   server.get('/widget', async (request, reply) => {
     // Look for widget in src/ (source) since HTML isn't compiled
     const widgetPath = path.join(process.cwd(), 'src', 'widget', 'index.html');
+    console.log(`[Widget] Looking for: ${widgetPath}, cwd: ${process.cwd()}`);
 
     if (!fs.existsSync(widgetPath)) {
-      return reply.code(404).send('Widget not found');
+      return reply.code(404).send(`Widget not found at ${widgetPath}`);
     }
 
     const html = fs.readFileSync(widgetPath, 'utf-8');
