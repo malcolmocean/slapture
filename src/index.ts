@@ -1,4 +1,5 @@
 // src/index.ts
+import 'dotenv/config';
 import { buildServer } from './server/index.js';
 import { Storage } from './storage/index.js';
 

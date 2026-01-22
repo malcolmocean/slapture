@@ -11,6 +11,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.71.2
         version: 0.71.2
+      dotenv:
+        specifier: ^17.2.3
+        version: 17.2.3
       fastify:
         specifier: ^5.7.1
         version: 5.7.1
@@ -439,6 +442,10 @@ packages:
   dequal@2.0.3:
     resolution: {integrity: sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==}
     engines: {node: '>=6'}
+
+  dotenv@17.2.3:
+    resolution: {integrity: sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w==}
+    engines: {node: '>=12'}
 
   es-module-lexer@1.7.0:
     resolution: {integrity: sha512-jEQoCwk8hyb2AZziIOLhDqpm5+2ww5uIE6lkO/6jcOCusfk6LhMHpXXfBLXTZ7Ydyt0j4VoUQv6uGNYbdW+kBA==}
@@ -1037,6 +1044,8 @@ snapshots:
   cookie@1.1.1: {}
 
   dequal@2.0.3: {}
+
+  dotenv@17.2.3: {}
 
   es-module-lexer@1.7.0: {}
 

@@ -4,3 +4,4 @@ data/
 filestore/
 test-*-data/
 test-*-filestore/
+.env
