@@ -72,9 +72,13 @@ export async function buildServer(
     if (capture.routeFinal) {
       const route = await storage.getRoute(capture.routeFinal);
       if (route) {
-        // Format: "append-filename.csv" style
-        const operation = route.transformScript?.includes('appendFileSync') ? 'append' : 'write';
-        routeDisplayName = `${operation}-${route.destinationConfig.filePath}`;
+        // Format: "append-filename.csv" style or destination type
+        if (route.destinationType === 'fs') {
+          const operation = route.transformScript?.includes('appendFileSync') ? 'append' : 'write';
+          routeDisplayName = `${operation}-${(route.destinationConfig as { filePath: string }).filePath}`;
+        } else {
+          routeDisplayName = `${route.destinationType}-${route.name}`;
+        }
       }
     }
 

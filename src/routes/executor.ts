@@ -23,6 +23,14 @@ export class RouteExecutor {
     metadata: Record<string, string>,
     timestamp?: string
   ): Promise<ExecutionResult> {
+    // Only handle 'fs' destination type in this executor
+    if (route.destinationType !== 'fs') {
+      return {
+        success: false,
+        error: `Unsupported destination type: ${route.destinationType}`,
+      };
+    }
+
     const userDir = path.join(this.filestoreRoot, username);
 
     // Ensure user directory exists
@@ -30,8 +38,8 @@ export class RouteExecutor {
       fs.mkdirSync(userDir, { recursive: true });
     }
 
-    // Resolve and validate file path
-    const configuredPath = route.destinationConfig.filePath;
+    // Resolve and validate file path (type narrowed by destinationType check above)
+    const configuredPath = (route.destinationConfig as { filePath: string }).filePath;
     const absolutePath = path.resolve(userDir, configuredPath);
     const normalizedUserDir = path.resolve(userDir);
 

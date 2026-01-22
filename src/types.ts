@@ -14,7 +14,13 @@ export interface Capture {
   routeFinal: string | null;
 
   executionTrace: ExecutionStep[];
-  executionResult: 'success' | 'failed' | 'pending' | 'rejected';
+  executionResult:
+    | 'success'
+    | 'failed'
+    | 'pending'
+    | 'rejected'
+    | 'blocked_needs_auth'    // Waiting for user to complete OAuth
+    | 'blocked_auth_expired'; // Had auth, it expired
 
   verificationState:
     | 'human_verified'
@@ -65,10 +71,10 @@ export interface Route {
   schema: string | null;
   recentItems: CaptureRef[];
 
-  destinationType: 'fs';
-  destinationConfig: {
-    filePath: string;
-  };
+  destinationType: 'fs' | 'intend';
+  destinationConfig:
+    | { filePath: string }  // fs
+    | { baseUrl: string };  // intend
   transformScript: string | null;
 
   createdAt: string;
@@ -91,11 +97,23 @@ export interface CaptureRef {
   wasCorrect: boolean;
 }
 
+export interface IntendTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: string;  // ISO 8601
+  baseUrl: string;
+}
+
+export interface IntegrationConfig {
+  intend?: IntendTokens;
+}
+
 export interface Config {
   authToken: string;
   requireApproval: boolean;
   approvalGuardPrompt: string | null;
   mastermindRetryAttempts: number;
+  integrations?: IntegrationConfig;
 }
 
 export interface ParseResult {
