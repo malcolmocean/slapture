@@ -35,9 +35,9 @@ export class Storage {
   }
 
   private formatCaptureFilename(capture: Capture, username: string): string {
-    // Format: YYYY-MM-DD_uuid.json
-    const isoDate = capture.timestamp.split('T')[0];
-    return `${isoDate}_${capture.id}.json`;
+    // Format: 2026-01-22T14-56-54-098Z_uuid.json (full ISO with filename-safe punctuation)
+    const safeTimestamp = capture.timestamp.replace(/:/g, '-').replace(/\./g, '-');
+    return `${safeTimestamp}_${capture.id}.json`;
   }
 
   // Captures
