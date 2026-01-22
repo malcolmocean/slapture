@@ -2,6 +2,7 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import { Storage } from '../storage/index.js';
 import { CapturePipeline } from '../pipeline/index.js';
+import { buildOAuthRoutes } from './oauth.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -23,6 +24,14 @@ export async function buildServer(
     // Skip auth for widget (request.url includes query string, so parse it)
     const pathname = request.url.split('?')[0];
     if (pathname === '/widget' || pathname.startsWith('/widget/')) {
+      return;
+    }
+
+    // Skip auth for OAuth routes (public endpoints)
+    if (pathname.startsWith('/connect/') ||
+        pathname.startsWith('/oauth/') ||
+        pathname.startsWith('/auth/status/') ||
+        pathname.startsWith('/disconnect/')) {
       return;
     }
 
@@ -110,6 +119,14 @@ export async function buildServer(
 
     const html = fs.readFileSync(widgetPath, 'utf-8');
     reply.type('text/html').send(html);
+  });
+
+  // Add OAuth routes for intend.do integration
+  buildOAuthRoutes(server, storage, {
+    intendClientId: process.env.INTEND_CLIENT_ID || '',
+    intendClientSecret: process.env.INTEND_CLIENT_SECRET || '',
+    intendBaseUrl: process.env.INTEND_BASE_URL || 'https://intend.do',
+    callbackBaseUrl: process.env.CALLBACK_BASE_URL || 'http://localhost:3333'
   });
 
   return server;
