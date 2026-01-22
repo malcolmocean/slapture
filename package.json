@@ -9,6 +9,7 @@
     "start": "tsx scripts/check-stale.ts && node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "test": "vitest",
+    "test:evolver": "tsx scripts/run-evolver-tests.ts",
     "test:e2e": "playwright test",
     "seed": "tsx scripts/seed-routes.ts"
   },

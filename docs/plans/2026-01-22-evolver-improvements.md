@@ -79,28 +79,31 @@ The current `dynamicInput` stored in traces is incomplete for true retroactive r
 
 **Why this matters**: If we replay an old capture against a modified prompt, we need to know exactly what the LLM saw at that time. The routes' recent items and triggers change constantly, so without capturing them we can't reproduce the original decision context.
 
-### Phase 3: Test Ratcheting System (TODO)
+### Phase 3: Test Ratcheting System (DONE)
 
 - [x] **Evolver test case storage** - `data/evolver-tests/` directory exists. `EvolverTestCase` type defined in types.ts with storage methods in storage/index.ts.
 
-- [ ] **Auto-save test cases** - When evolver runs:
-  1. Always save the evolver call as a test case with `isRatchetCase: false`
-  2. Prune to keep only the last 5 non-ratchet cases (rolling window)
+- [x] **Auto-save test cases** - When evolver runs:
+  1. Always save the evolver call as a test case
+  2. Cases where evolution happened are marked `isRatchetCase: true`
+  3. Prune to keep only the last 5 non-ratchet cases (rolling window)
+  4. Implementation in `src/pipeline/index.ts:saveEvolverTestCase()`
 
-- [ ] **Ratchet cases** - Manually added by developers when fixing the evolver prompt:
-  1. When evolver misbehaves, developer fixes the prompt
-  2. Developer adds that specific input as a test case with `isRatchetCase: true`
-  3. Ratchet cases are never auto-deleted
+- [x] **Ratchet cases** - Automatically created when evolver evolves:
+  1. When evolver evolves a route, the test case is marked as ratchet
+  2. Ratchet cases are never auto-deleted
+  3. Developer can manually add ratchet cases for specific failures
 
-- [ ] **Test runner for prompt iteration** - When updating the evolver prompt:
-  1. Run all test cases (last 5 auto-saved + all ratchet cases) through new prompt
+- [x] **Test runner for prompt iteration** - When updating the evolver prompt:
+  1. Run `pnpm test:evolver` to test all cases against current prompt
   2. Verify no regressions (cases that should skip still skip, cases that should evolve still evolve)
-  3. Report any failures
+  3. Reports false_positive (overfitting) and false_negative (too conservative) regressions
+  4. Implementation in `src/mastermind/evolver-test-runner.ts`
 
-- [ ] **Prominent note in evolver.ts** - Add comment block explaining:
+- [x] **Prominent note in evolver.ts** - Added comment block explaining:
   - The test ratchet system
-  - When modifying the prompt, add the failing input as a ratchet case
-  - Run test runner before committing prompt changes
+  - When modifying the prompt, run `pnpm test:evolver`
+  - Links to relevant files
 
 ### Phase 4: Future Optimizations (DEFERRED)
 
@@ -121,3 +124,4 @@ The current `dynamicInput` stored in traces is incomplete for true retroactive r
 
 1. `9ccb972` - feat: conservative evolver + captures restructure (Phase 1 complete)
 2. `0e35177` - feat: add LLM input tracing and evolver test case infrastructure (Phase 2 complete)
+3. (pending) - feat: add evolver test ratcheting system (Phase 3 complete)

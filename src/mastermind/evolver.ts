@@ -1,4 +1,33 @@
 // src/mastermind/evolver.ts
+//
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║                         TEST RATCHET SYSTEM                                ║
+// ╠════════════════════════════════════════════════════════════════════════════╣
+// ║ When modifying the evolver prompt below, you MUST:                         ║
+// ║                                                                            ║
+// ║ 1. Run the evolver test suite first:                                       ║
+// ║    pnpm test:evolver                                                       ║
+// ║                                                                            ║
+// ║ 2. If a test case fails showing a regression you want to fix:              ║
+// ║    - Fix the prompt                                                        ║
+// ║    - The failing input is already saved as a ratchet case                  ║
+// ║                                                                            ║
+// ║ 3. If the evolver misbehaved in production:                                ║
+// ║    - The call was auto-saved as a test case                                ║
+// ║    - If it evolved when it shouldn't have, it's a ratchet case             ║
+// ║    - Fix the prompt to make the test pass                                  ║
+// ║                                                                            ║
+// ║ 4. Run tests again before committing:                                      ║
+// ║    pnpm test:evolver                                                       ║
+// ║                                                                            ║
+// ║ Test cases are stored in: data/evolver-tests/                              ║
+// ║ - Ratchet cases (evolved): never auto-deleted, serve as regression tests   ║
+// ║ - Non-ratchet cases (skipped): rolling window of last 5                    ║
+// ║                                                                            ║
+// ║ See: src/mastermind/evolver-test-runner.ts                                 ║
+// ║      src/mastermind/evolver-ratchet.ts                                     ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+//
 import Anthropic from '@anthropic-ai/sdk';
 import { Route, RouteTrigger, EvolverResult, Capture } from '../types.js';
 

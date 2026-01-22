@@ -7,6 +7,7 @@ import { Dispatcher } from '../dispatcher/index.js';
 import { RouteExecutor } from '../routes/executor.js';
 import { Mastermind } from '../mastermind/index.js';
 import { Evolver, EvolverContext } from '../mastermind/evolver.js';
+import { createEvolverTestCase } from '../mastermind/evolver-ratchet.js';
 
 export interface PipelineResult {
   capture: Capture;
@@ -258,6 +259,10 @@ export class CapturePipeline {
           staticPrompt: promptUsed,
         }, { ...result, validationPassed: null, retriesUsed: attempt }, evolverStart);
         console.log(`[Pipeline] Evolver skipped evolution: ${result.reasoning}`);
+
+        // Auto-save test case for ratcheting system
+        await this.saveEvolverTestCase(route, newInput, mastermindReason, promptUsed, result);
+
         return null;
       }
 
@@ -282,6 +287,10 @@ export class CapturePipeline {
           staticPrompt: promptUsed,
         }, { ...result, validationPassed: null, retriesUsed: attempt }, evolverStart);
         console.log(`[Pipeline] Evolver failed: ${result.reasoning}`);
+
+        // Auto-save test case for ratcheting system
+        await this.saveEvolverTestCase(route, newInput, mastermindReason, promptUsed, result);
+
         return null;
       }
 
@@ -318,6 +327,10 @@ export class CapturePipeline {
           staticPrompt: promptUsed,
         }, { ...result, validationPassed: true, retriesUsed: attempt }, evolverStart);
         console.log(`[Pipeline] Evolution applied to route ${route.name}`);
+
+        // Auto-save test case for ratcheting system (evolved = ratchet case)
+        await this.saveEvolverTestCase(route, newInput, mastermindReason, promptUsed, result);
+
         return updatedRoute;
       }
 
@@ -398,5 +411,25 @@ export class CapturePipeline {
         },
       ],
     };
+  }
+
+  /**
+   * Save evolver test case for the ratcheting system.
+   * Auto-saves after each evolver call, then prunes old non-ratchet cases.
+   */
+  private async saveEvolverTestCase(
+    route: Route,
+    newInput: string,
+    mastermindReason: string,
+    promptUsed: string,
+    result: import('../types.js').EvolverResult
+  ): Promise<void> {
+    const testCase = createEvolverTestCase(
+      { newInput, route, mastermindReason, promptUsed },
+      result
+    );
+    await this.storage.saveEvolverTestCase(testCase);
+    // Prune to keep only last 5 non-ratchet cases
+    await this.storage.pruneEvolverTestCases(5);
   }
 }
