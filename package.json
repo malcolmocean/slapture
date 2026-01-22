@@ -6,8 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc --watch",
+    "start": "tsx scripts/check-stale.ts && node dist/index.js",
+    "dev": "tsx watch src/index.ts",
     "test": "vitest",
     "test:e2e": "playwright test",
     "seed": "tsx scripts/seed-routes.ts"
