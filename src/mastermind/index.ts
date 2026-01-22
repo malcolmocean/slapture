@@ -47,10 +47,19 @@ Your options:
 4. Send to inbox: {"action": "inbox", "reason": "..."}
 
 For transformScript, you have access to: fs (sandboxed), payload, filePath, timestamp, metadata.
+Relative file paths in transformScript are resolved within the user's filestore directory.
 Common patterns:
 - Append text: fs.appendFileSync(filePath, payload + '\\n')
 - JSON map: read, parse, update, write back
-- CSV append: read lines, add new row, write back
+- CSV append: fs.appendFileSync('filename.csv', timestamp.split('T')[0] + ',' + message + '\\n')
+
+When creating routes for "log X to Y" patterns:
+1. Extract the filename (e.g., "gwen_memories.csv")
+2. Create a natural shorthand trigger from the filename (e.g., "gwen memory" from "gwen_memories")
+3. Include BOTH "log" prefix trigger AND the shorthand in the triggers array
+4. Use relative filenames in transformScript - they resolve within the user directory
+
+For CSV files, include date as first column. For log files, prefix each line with date.
 
 Consider alternative interpretations. Only reject alternatives that are clearly absurd.
 If the input is ambiguous between reasonable interpretations, choose "clarify".

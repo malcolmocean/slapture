@@ -81,7 +81,8 @@ export class RouteExecutor {
 
   private createSandboxedFs(userDir: string) {
     const validatePath = (p: string) => {
-      const resolved = path.resolve(p);
+      // Resolve relative paths within the user directory
+      const resolved = path.isAbsolute(p) ? p : path.resolve(userDir, p);
       if (!resolved.startsWith(userDir)) {
         throw new Error(`Path validation failed: access denied outside user directory`);
       }

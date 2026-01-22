@@ -13,11 +13,22 @@ export class Dispatcher {
   }
 
   dispatch(parsed: ParseResult): DispatchResult {
-    // If explicit route specified, look for exact match
+    // If explicit route specified, look for match by name or trigger pattern
     if (parsed.explicitRoute) {
-      const route = this.routes.find(
+      // First try exact name match
+      let route = this.routes.find(
         r => r.name.toLowerCase() === parsed.explicitRoute?.toLowerCase()
       );
+
+      // If no name match, check if any route has a trigger that matches the explicit route
+      if (!route) {
+        route = this.routes.find(r =>
+          r.triggers.some(t =>
+            t.type === 'prefix' &&
+            t.pattern.toLowerCase() === parsed.explicitRoute?.toLowerCase()
+          )
+        );
+      }
 
       if (route) {
         return {

@@ -5,11 +5,14 @@ export class Parser {
   parse(raw: string): ParseResult {
     const trimmed = raw.trim();
 
-    // Try prefix with colon: "dump: content"
-    const colonMatch = trimmed.match(/^([a-zA-Z][\w-]*?):\s+(.+)$/s);
+    // Try prefix with colon: "dump: content" or "gwen memory: content"
+    // Multi-word route hints allowed (letters, spaces, hyphens, underscores)
+    const colonMatch = trimmed.match(/^([a-zA-Z][\w\s-]*?):\s+(.+)$/s);
     if (colonMatch) {
+      // Normalize route name: lowercase, trim, collapse multiple spaces
+      const routeName = colonMatch[1].toLowerCase().trim().replace(/\s+/g, ' ');
       return {
-        explicitRoute: colonMatch[1].toLowerCase(),
+        explicitRoute: routeName,
         payload: colonMatch[2].trim(),
         metadata: {},
       };

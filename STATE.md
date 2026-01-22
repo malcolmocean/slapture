@@ -1,74 +1,83 @@
 # Slapture Implementation State
 
 ## Current Phase
-Phase 1: Initial Implementation - COMPLETE
+Phase 1.1: Dynamic File Logging & Personal Shorthands - IN PROGRESS
 
 ## Status
-✅ Phase 1 Complete
+Working on Phase 1.1 features
 
-## Completed
-- [x] Set up Claude Code permissions
-- [x] Created STATE.md
-- [x] Brainstorming and spec refinement
-- [x] Implementation plan written (docs/plans/2026-01-21-slapture-phase1.md)
-- [x] Task 1: Project Scaffolding (e5138ec)
-- [x] Task 2: Storage Layer (ec3148a)
-- [x] Task 3: Parser Module (3816167)
-- [x] Task 4: Dispatcher Module (290d5b2)
-- [x] Task 5: Route Executor (e6b3aa8)
-- [x] Task 6: Mastermind Integration (69d01be)
-- [x] Task 7: Capture Pipeline (0db322f)
-- [x] Task 8: HTTP Server (ac25e76)
-- [x] Task 9: Web Widget (d3471a6)
-- [x] Task 10: Seed Routes for Testing (2d99be1)
-- [x] Task 11: Playwright E2E Tests (4b727d1)
-- [x] Task 12: Final Integration and Cleanup
+## Recently Completed (This Session)
 
-## Phase 1 Summary
+### Bug Fix: Sandboxed FS Path Resolution
+- **Issue**: Mastermind-created routes failed with "Path validation failed: access denied outside user directory"
+- **Cause**: Sandboxed fs resolved relative paths against CWD instead of user directory
+- **Fix**: `src/routes/executor.ts:83` - relative paths now resolve within user directory
+- **Commit**: Pending
 
-### What's Built
-1. **Storage layer** - File-based CRUD for captures, routes, config
-2. **Parser** - Extracts explicit routes, hashtags, metadata
-3. **Dispatcher** - Matches triggers by prefix, regex, keyword
-4. **Route Executor** - Runs transformScripts in node:vm with sandboxed fs
-5. **Mastermind** - Anthropic API integration for novel inputs
-6. **Capture Pipeline** - Orchestrates the full flow
-7. **HTTP Server** - Fastify with /capture, /status, /routes, /captures, /widget
-8. **Web Widget** - Clean UI with progressive status updates
-9. **Tests** - 37 unit tests, 8 E2E tests
+### Feature: Multi-Word Route Hints
+- **Issue**: Parser only recognized single-word route hints like `dump:`
+- **Fix**: Extended regex to allow multi-word hints like `gwen memory:`
+- **Files changed**:
+  - `src/parser/index.ts` - Extended colon prefix regex
+  - `src/dispatcher/index.ts` - Match explicit routes by trigger pattern too
+- **Tests added**: 3 new unit tests (40 total, all passing)
 
-### How to Run
+### Feature: Improved Mastermind Prompt
+- Added guidance for creating shorthand triggers from filenames
+- Clarified that relative paths resolve within user directory
+- Added CSV date formatting guidance
+
+### Documentation
+- Created `SPEC_PHASE1.1.md` with full spec for dynamic logging features
+- Archived old STATE.md to `docs/old/`
+
+## Verified Working
+
 ```bash
-pnpm seed                           # Set up initial routes
-ANTHROPIC_API_KEY=... pnpm start    # Start server on port 3000
-# Visit http://localhost:3000/widget?token=dev-token
+# First input - creates route
+log "test memory" to gwen_memories.csv with today's date
+# Result: Creates gwen_memories.csv with "2026-01-22,test memory"
+
+# Second input - uses shorthand
+gwen memory: you said milk for the first time
+# Result: Appends "2026-01-22,you said milk for the first time"
 ```
 
-## Next Up (Phase 2)
-- OAuth / real integrations
-- Dashboard UI for reviewing captures
-- LLM validation at route level
+## Test Cases for Phase 1.1
 
-## Design Decisions (from brainstorming)
-- **API key**: ANTHROPIC_API_KEY environment variable
-- **Route creation**: Create and execute immediately (default), with optional requireApproval setting
-- **Mastermind failures**: Write to slapture-inbox.txt, auto-retry
-- **Transform scripts**: node:vm for basic sandboxing
-- **Destinations**: Filesystem as API
-  - Single destination type: `fs` (filesystem operations)
-  - All files scoped to `filestore/{username}/` directory
-  - Transform scripts have access to: fs, payload, filePath, timestamp, metadata
-  - Mastermind builds whatever abstractions it needs (JSON maps, CSV operations, etc.) in the transformScript
-  - Treats filesystem like an SDK - full flexibility for any file operation pattern
-- **Widget styling**: Clean and minimal (simple CSS, readable but not fancy)
+From SPEC_PHASE1.1.md:
+- [x] Example Set F: Dynamic file logging - VERIFIED WORKING
+- [x] Example Set G: Multi-word route hints - VERIFIED WORKING
+- [ ] Example Set H: CSV with timestamps - needs Playwright tests
+- [ ] Example Set I: Error handling (path escape) - needs Playwright tests
 
-## Open Questions
-None
+## Pending
 
-## Blockers
-None
+1. **Commit changes** - code is ready
+2. **Playwright E2E tests** for Example Sets F-I
+3. **Parser edge case**: What if user types `gwen memory:` with no content?
+
+## How to Run
+
+```bash
+pnpm build                          # Build after code changes
+pnpm test                           # Run unit tests (40 tests)
+pnpm start                          # Start server on port 3333
+# Visit http://localhost:3333/widget?token=dev-token
+```
+
+## Files Changed This Session
+
+- `src/routes/executor.ts` - Fixed path resolution
+- `src/parser/index.ts` - Multi-word route hints
+- `src/dispatcher/index.ts` - Match by trigger pattern
+- `src/mastermind/index.ts` - Improved prompt
+- `tests/unit/parser.test.ts` - Added tests
+- `tests/unit/dispatcher.test.ts` - Added tests
+- `SPEC_PHASE1.1.md` - New spec document
 
 ## Notes
-- Using pnpm
-- Subagent-heavy approach to keep context fresh
-- Committing frequently at natural breakpoints
+
+- Unit tests: 40 passing
+- Mastermind uses claude-sonnet-4-20250514
+- API key must be set in .env (no quotes needed around value)
