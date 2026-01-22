@@ -1,7 +1,7 @@
 // tests/unit/storage.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Storage } from '../../src/storage/index.js';
-import { Capture, Route } from '../../src/types.js';
+import { Capture, Route, IntendTokens } from '../../src/types.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -119,6 +119,111 @@ describe('Storage', () => {
       const found = await storage.getRouteByName('notes');
 
       expect(found?.id).toBe('route-2');
+    });
+  });
+
+  describe('Integration Storage', () => {
+    it('should save and retrieve intend tokens', async () => {
+      const tokens: IntendTokens = {
+        accessToken: 'access-123',
+        refreshToken: 'refresh-456',
+        expiresAt: '2026-01-22T12:00:00Z',
+        baseUrl: 'https://intend.do'
+      };
+
+      await storage.saveIntendTokens(tokens);
+      const retrieved = await storage.getIntendTokens();
+
+      expect(retrieved).toEqual(tokens);
+    });
+
+    it('should return null when no intend tokens exist', async () => {
+      const tokens = await storage.getIntendTokens();
+      expect(tokens).toBeNull();
+    });
+
+    it('should clear intend tokens', async () => {
+      const tokens: IntendTokens = {
+        accessToken: 'access-123',
+        refreshToken: 'refresh-456',
+        expiresAt: '2026-01-22T12:00:00Z',
+        baseUrl: 'https://intend.do'
+      };
+
+      await storage.saveIntendTokens(tokens);
+      await storage.clearIntendTokens();
+      const retrieved = await storage.getIntendTokens();
+
+      expect(retrieved).toBeNull();
+    });
+
+    it('should list captures needing auth', async () => {
+      // Create a blocked capture
+      const capture: Capture = {
+        id: 'test-capture-1',
+        raw: 'intend: test intention',
+        timestamp: new Date().toISOString(),
+        parsed: { explicitRoute: 'intend', payload: 'test intention', metadata: {} },
+        routeProposed: 'intend-route',
+        routeConfidence: 'high' as const,
+        routeFinal: 'intend-route',
+        executionTrace: [],
+        executionResult: 'blocked_needs_auth' as const,
+        verificationState: 'pending' as const,
+        retiredFromTests: false,
+        retiredReason: null
+      };
+
+      await storage.saveCapture(capture, 'default');
+      const blocked = await storage.listCapturesNeedingAuth();
+
+      expect(blocked.length).toBe(1);
+      expect(blocked[0].id).toBe('test-capture-1');
+    });
+
+    it('should list captures with expired auth', async () => {
+      const capture: Capture = {
+        id: 'test-capture-2',
+        raw: 'intend: another intention',
+        timestamp: new Date().toISOString(),
+        parsed: { explicitRoute: 'intend', payload: 'another intention', metadata: {} },
+        routeProposed: 'intend-route',
+        routeConfidence: 'high' as const,
+        routeFinal: 'intend-route',
+        executionTrace: [],
+        executionResult: 'blocked_auth_expired' as const,
+        verificationState: 'pending' as const,
+        retiredFromTests: false,
+        retiredReason: null
+      };
+
+      await storage.saveCapture(capture, 'default');
+      const blocked = await storage.listCapturesNeedingAuth();
+
+      expect(blocked.length).toBe(1);
+      expect(blocked[0].id).toBe('test-capture-2');
+    });
+
+    it('should not include non-blocked captures in listCapturesNeedingAuth', async () => {
+      const successCapture: Capture = {
+        id: 'success-capture',
+        raw: 'dump: hello',
+        timestamp: new Date().toISOString(),
+        parsed: null,
+        routeProposed: null,
+        routeConfidence: null,
+        routeFinal: null,
+        executionTrace: [],
+        executionResult: 'success' as const,
+        verificationState: 'pending' as const,
+        retiredFromTests: false,
+        retiredReason: null
+      };
+
+      await storage.saveCapture(successCapture, 'default');
+      const blocked = await storage.listCapturesNeedingAuth();
+
+      expect(blocked.length).toBe(0);
     });
   });
 });

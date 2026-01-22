@@ -1,7 +1,7 @@
 // src/storage/index.ts
 import fs from 'fs';
 import path from 'path';
-import { Capture, Route, Config, ExecutionStep, EvolverTestCase } from '../types.js';
+import { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens } from '../types.js';
 
 export class Storage {
   private dataDir: string;
@@ -235,5 +235,35 @@ export class Storage {
     for (const tc of toDelete) {
       await this.deleteEvolverTestCase(tc.id);
     }
+  }
+
+  // Integration Token Storage (intend.do OAuth)
+  async saveIntendTokens(tokens: IntendTokens): Promise<void> {
+    const config = await this.getConfig();
+    config.integrations = config.integrations || {};
+    config.integrations.intend = tokens;
+    await this.saveConfig(config);
+  }
+
+  async getIntendTokens(): Promise<IntendTokens | null> {
+    const config = await this.getConfig();
+    return config.integrations?.intend || null;
+  }
+
+  async clearIntendTokens(): Promise<void> {
+    const config = await this.getConfig();
+    if (config.integrations) {
+      delete config.integrations.intend;
+      await this.saveConfig(config);
+    }
+  }
+
+  // List captures blocked on authentication
+  async listCapturesNeedingAuth(): Promise<Capture[]> {
+    const captures = await this.listAllCaptures();
+    return captures.filter(c =>
+      c.executionResult === 'blocked_needs_auth' ||
+      c.executionResult === 'blocked_auth_expired'
+    );
   }
 }
