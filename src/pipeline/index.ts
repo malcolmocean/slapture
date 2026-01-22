@@ -89,8 +89,20 @@ export class CapturePipeline {
           dispatchResult.reason
         );
         // Store both the dynamic input context and the full prompt for retroactive replay
+        // Include full route snapshots as shown to the LLM (name, description, triggers, recent items)
         this.addTrace(capture, 'mastermind', {
-          dynamicInput: { raw, parsed, dispatcherReason: dispatchResult.reason, routeCount: routes.length },
+          dynamicInput: {
+            raw,
+            parsed,
+            dispatcherReason: dispatchResult.reason,
+            routesSnapshot: routes.map(r => ({
+              id: r.id,
+              name: r.name,
+              description: r.description,
+              triggers: r.triggers,
+              recentItems: r.recentItems.slice(0, 3),  // matches buildPrompt limit
+            })),
+          },
           staticPrompt: promptUsed,
         }, action, mastermindStart);
         console.log(`[Pipeline] Mastermind action: ${action.action}`, action.routeId || action.route?.name || '');
@@ -227,8 +239,22 @@ export class CapturePipeline {
 
       if (result.action === 'skipped') {
         // Add trace for skipped evolution
+        // Include full route snapshot as shown to the LLM
         this.addTrace(capture, 'evolve', {
-          dynamicInput: { newInput, routeId: route.id, routeName: route.name, mastermindReason, attempt },
+          dynamicInput: {
+            newInput,
+            mastermindReason,
+            attempt,
+            routeSnapshot: {
+              id: route.id,
+              name: route.name,
+              description: route.description,
+              triggers: route.triggers,
+              transformScript: route.transformScript,
+              recentItems: route.recentItems.slice(0, 5),  // matches buildPrompt limit
+            },
+            validationFailure: context.validationFailure,
+          },
           staticPrompt: promptUsed,
         }, { ...result, validationPassed: null, retriesUsed: attempt }, evolverStart);
         console.log(`[Pipeline] Evolver skipped evolution: ${result.reasoning}`);
@@ -237,8 +263,22 @@ export class CapturePipeline {
 
       if (result.action === 'failed') {
         // Add trace for failed evolution
+        // Include full route snapshot as shown to the LLM
         this.addTrace(capture, 'evolve', {
-          dynamicInput: { newInput, routeId: route.id, routeName: route.name, mastermindReason, attempt },
+          dynamicInput: {
+            newInput,
+            mastermindReason,
+            attempt,
+            routeSnapshot: {
+              id: route.id,
+              name: route.name,
+              description: route.description,
+              triggers: route.triggers,
+              transformScript: route.transformScript,
+              recentItems: route.recentItems.slice(0, 5),  // matches buildPrompt limit
+            },
+            validationFailure: context.validationFailure,
+          },
           staticPrompt: promptUsed,
         }, { ...result, validationPassed: null, retriesUsed: attempt }, evolverStart);
         console.log(`[Pipeline] Evolver failed: ${result.reasoning}`);
@@ -259,8 +299,22 @@ export class CapturePipeline {
         const updatedRoute = this.applyEvolution(route, result, newInput);
         await this.storage.saveRoute(updatedRoute);
         // Add trace for successful evolution
+        // Include full route snapshot as shown to the LLM (BEFORE evolution was applied)
         this.addTrace(capture, 'evolve', {
-          dynamicInput: { newInput, routeId: route.id, routeName: route.name, mastermindReason, attempt },
+          dynamicInput: {
+            newInput,
+            mastermindReason,
+            attempt,
+            routeSnapshot: {
+              id: route.id,
+              name: route.name,
+              description: route.description,
+              triggers: route.triggers,
+              transformScript: route.transformScript,
+              recentItems: route.recentItems.slice(0, 5),  // matches buildPrompt limit
+            },
+            validationFailure: context.validationFailure,
+          },
           staticPrompt: promptUsed,
         }, { ...result, validationPassed: true, retriesUsed: attempt }, evolverStart);
         console.log(`[Pipeline] Evolution applied to route ${route.name}`);
@@ -285,8 +339,22 @@ export class CapturePipeline {
     }
 
     // All retries exhausted - add trace
+    // Include full route snapshot as shown to the LLM
     this.addTrace(capture, 'evolve', {
-      dynamicInput: { newInput, routeId: route.id, routeName: route.name, mastermindReason, attempt: MAX_RETRIES },
+      dynamicInput: {
+        newInput,
+        mastermindReason,
+        attempt: MAX_RETRIES,
+        routeSnapshot: {
+          id: route.id,
+          name: route.name,
+          description: route.description,
+          triggers: route.triggers,
+          transformScript: route.transformScript,
+          recentItems: route.recentItems.slice(0, 5),  // matches buildPrompt limit
+        },
+        validationFailure: context.validationFailure,
+      },
       staticPrompt: '(see previous attempts)',
     }, { action: 'failed', reasoning: 'All retries exhausted', validationPassed: false, retriesUsed: MAX_RETRIES }, evolverStart);
     console.log(`[Pipeline] Evolver exhausted all retries for route ${route.name}`);

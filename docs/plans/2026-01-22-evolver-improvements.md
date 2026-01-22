@@ -66,22 +66,18 @@
 
 - [x] **EvolverTestCase infrastructure** - Added type and storage methods (save, list, delete, prune)
 
-### Phase 2.5: Complete Dynamic Input Capture (TODO)
+### Phase 2.5: Complete Dynamic Input Capture (DONE)
 
 The current `dynamicInput` stored in traces is incomplete for true retroactive replay:
 
-**Mastermind** - Currently stores `{ raw, parsed, dispatcherReason, routeCount }` but the prompt also includes:
-- Each route's full description, triggers, and recent items (up to 3 per route)
-- This changes over time as routes are used/evolved
+**Mastermind** - Now stores full `routesSnapshot` array with each route's:
+- id, name, description, triggers, recentItems (slice of 3, matching buildPrompt)
 
-**Evolver** - Currently stores `{ newInput, routeId, routeName, mastermindReason, attempt }` but the prompt also includes:
-- The route's current triggers (numbered list)
-- The route's transform script
-- The route's recent successful matches (up to 5)
+**Evolver** - Now stores full `routeSnapshot` object with:
+- id, name, description, triggers, transformScript, recentItems (slice of 5, matching buildPrompt)
+- Also captures `validationFailure` context for retries
 
 **Why this matters**: If we replay an old capture against a modified prompt, we need to know exactly what the LLM saw at that time. The routes' recent items and triggers change constantly, so without capturing them we can't reproduce the original decision context.
-
-**Fix**: Expand `dynamicInput` to include snapshots of all route data shown to the LLM at call time, not just IDs/names.
 
 ### Phase 3: Test Ratcheting System (TODO)
 
