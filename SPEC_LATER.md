@@ -626,10 +626,10 @@ If any component fails:
 ## Success Criteria by Phase
 
 ### Phase 2
-- [ ] intend.do OAuth flow works end-to-end
-- [ ] Captures can route to intend.do and create intentions
-- [ ] Blocked-needs-auth state works correctly
-- [ ] Playwright tests cover OAuth flow with test credentials
+- [x] intend.do OAuth flow works end-to-end
+- [x] Captures can route to intend.do and create intentions
+- [x] Blocked-needs-auth state works correctly
+- [x] Playwright tests cover OAuth flow with test credentials
 
 ### Phase 3
 - [ ] Dashboard shows all captures with filtering
@@ -671,3 +671,8 @@ For tmux/Claude Code orchestration pattern, see: https://github.com/KyleHerndon/
 ## Other ideas/todos
 
 - [ ] At some point we'll need to make sure we use user's timezone for today's date, and maybe also smart dates where 1am friday night is still friday not "uhh ackshully it's saturday morning"
+- [ ] User ability to add per-route or per-destination context
+  - they should be able to edit that in a UI somewhere
+  - but also! they should be able to add those updates by just giving an update to the system AS TOP-LEVEL INPUT!
+    - like "intend intentions are only for today, so if something doesn't say 'today' then don't put it there!"
+    - or "if I say message Jess, use whatsapp"
