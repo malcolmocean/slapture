@@ -10,7 +10,11 @@ export async function buildServer(
   filestoreRoot: string,
   apiKey: string
 ): Promise<FastifyInstance> {
-  const server = Fastify({ logger: true });
+  const server = Fastify({
+    logger: {
+      level: 'warn',
+    },
+  });
 
   const pipeline = new CapturePipeline(storage, filestoreRoot, apiKey);
 
@@ -63,7 +67,18 @@ export async function buildServer(
       return reply.code(404).send({ error: 'Capture not found' });
     }
 
-    return capture;
+    // Include route details for display
+    let routeDisplayName: string | null = null;
+    if (capture.routeFinal) {
+      const route = await storage.getRoute(capture.routeFinal);
+      if (route) {
+        // Format: "append-filename.csv" style
+        const operation = route.transformScript?.includes('appendFileSync') ? 'append' : 'write';
+        routeDisplayName = `${operation}-${route.destinationConfig.filePath}`;
+      }
+    }
+
+    return { ...capture, routeDisplayName };
   });
 
   // GET /routes - List all routes

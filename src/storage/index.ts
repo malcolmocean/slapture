@@ -59,6 +59,21 @@ export class Storage {
     );
   }
 
+  async listAllCaptures(): Promise<Capture[]> {
+    const capturesDir = path.join(this.dataDir, 'captures');
+    if (!fs.existsSync(capturesDir)) {
+      return [];
+    }
+    const files = fs.readdirSync(capturesDir).filter(f => f.endsWith('.json'));
+
+    const captures: Capture[] = [];
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(capturesDir, file), 'utf-8');
+      captures.push(JSON.parse(content) as Capture);
+    }
+    return captures;
+  }
+
   // Routes
   async saveRoute(route: Route): Promise<void> {
     const filePath = path.join(this.dataDir, 'routes', `${route.id}.json`);

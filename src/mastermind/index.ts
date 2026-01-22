@@ -58,6 +58,7 @@ When creating routes for "log X to Y" patterns:
 2. Create a natural shorthand trigger from the filename (e.g., "gwen memory" from "gwen_memories")
 3. Include BOTH "log" prefix trigger AND the shorthand in the triggers array
 4. Use relative filenames in transformScript - they resolve within the user directory
+5. Route names should be descriptive: use the filename without extension (e.g., "gwen_memories" not "route-123")
 
 For CSV files, include date as first column. For log files, prefix each line with date.
 

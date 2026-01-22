@@ -28,12 +28,31 @@ export interface Capture {
 }
 
 export interface ExecutionStep {
-  step: 'parse' | 'dispatch' | 'route_validate' | 'execute' | 'mastermind';
+  step: 'parse' | 'dispatch' | 'route_validate' | 'execute' | 'mastermind' | 'evolve';
   timestamp: string;
   input: unknown;
   output: unknown;
   codeVersion: string;
   durationMs: number;
+}
+
+export interface EvolverResult {
+  action: 'evolved' | 'skipped' | 'failed';
+  triggers?: RouteTrigger[];
+  transform?: string;
+  reasoning: string;
+  validationPassed?: boolean;
+  validationErrors?: string[];
+  retriesUsed?: number;
+}
+
+export interface RouteVersion {
+  version: number;
+  timestamp: string;
+  triggers: RouteTrigger[];
+  transformScript: string | null;
+  reason: string;
+  evolvedFrom?: string; // The input that triggered evolution
 }
 
 export interface Route {
@@ -55,6 +74,8 @@ export interface Route {
   createdAt: string;
   createdBy: 'user' | 'mastermind';
   lastUsed: string | null;
+
+  versions?: RouteVersion[]; // Version history, newest first
 }
 
 export interface RouteTrigger {

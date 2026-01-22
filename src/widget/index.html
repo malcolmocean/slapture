@@ -236,7 +236,7 @@
         // Check final status
         if (capture.executionResult === 'success') {
           setStepDone('step-execute');
-          setStepDone('step-result', `Sent to ${capture.routeFinal || 'destination'}`);
+          setStepDone('step-result', `✓ ${capture.routeDisplayName || capture.routeFinal || 'destination'}`);
           return;
         } else if (capture.executionResult === 'failed') {
           setStepError('step-execute');

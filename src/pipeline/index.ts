@@ -1,11 +1,12 @@
 // src/pipeline/index.ts
 import { v4 as uuidv4 } from 'uuid';
-import { Capture, Route, ExecutionStep, ParseResult, DispatchResult } from '../types.js';
+import { Capture, Route, ExecutionStep, ParseResult, DispatchResult, RouteVersion } from '../types.js';
 import { Storage } from '../storage/index.js';
 import { Parser } from '../parser/index.js';
 import { Dispatcher } from '../dispatcher/index.js';
 import { RouteExecutor } from '../routes/executor.js';
 import { Mastermind } from '../mastermind/index.js';
+import { Evolver, EvolverContext } from '../mastermind/evolver.js';
 
 export interface PipelineResult {
   capture: Capture;
@@ -18,6 +19,7 @@ export class CapturePipeline {
   private dispatcher: Dispatcher;
   private executor: RouteExecutor;
   private mastermind: Mastermind;
+  private evolver: Evolver;
   private codeVersion: string;
 
   constructor(
@@ -31,6 +33,7 @@ export class CapturePipeline {
     this.dispatcher = new Dispatcher([]);
     this.executor = new RouteExecutor(filestoreRoot);
     this.mastermind = new Mastermind(apiKey);
+    this.evolver = new Evolver(apiKey);
     this.codeVersion = codeVersion;
   }
 
@@ -93,6 +96,16 @@ export class CapturePipeline {
           route = await this.storage.getRoute(action.routeId)
             || await this.storage.getRouteByName(action.routeId);
           console.log(`[Pipeline] Resolved route: ${route?.id || 'NOT FOUND'}`);
+
+          // Evolver fires when Mastermind routes to existing
+          if (route) {
+            const evolvedRoute = await this.tryEvolveRoute(route, raw, action.reason, routes);
+            if (evolvedRoute) {
+              route = evolvedRoute;
+              // Update dispatcher with evolved route
+              this.dispatcher.updateRoutes(routes.map(r => r.id === route!.id ? route! : r));
+            }
+          }
         } else if (action.action === 'create' && action.route) {
           // Create new route
           const newRoute: Route = {
@@ -179,5 +192,118 @@ export class CapturePipeline {
       codeVersion: this.codeVersion,
       durationMs: Date.now() - startTime,
     });
+  }
+
+  /**
+   * Try to evolve a route's triggers/transform to handle a new input variation.
+   * Returns the updated route if evolution succeeded, null otherwise.
+   */
+  private async tryEvolveRoute(
+    route: Route,
+    newInput: string,
+    mastermindReason: string,
+    allRoutes: Route[]
+  ): Promise<Route | null> {
+    const MAX_RETRIES = 3;
+    let context: EvolverContext = {
+      newInput,
+      route,
+      mastermindReason,
+    };
+
+    const allCaptures = await this.storage.listAllCaptures();
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      console.log(`[Pipeline] Evolver attempt ${attempt}/${MAX_RETRIES} for route ${route.name}`);
+
+      const result = await this.evolver.evolve(context);
+      console.log(`[Pipeline] Evolver result: ${result.action} - ${result.reasoning}`);
+
+      if (result.action === 'skipped') {
+        console.log(`[Pipeline] Evolver skipped evolution: ${result.reasoning}`);
+        return null;
+      }
+
+      if (result.action === 'failed') {
+        console.log(`[Pipeline] Evolver failed: ${result.reasoning}`);
+        return null;
+      }
+
+      // Validate proposed changes
+      const proposedTriggers = result.triggers || route.triggers;
+      const validation = this.evolver.validateChanges(
+        proposedTriggers,
+        route.id,
+        allCaptures,
+        allRoutes
+      );
+
+      if (validation.passed) {
+        // Apply changes
+        const updatedRoute = this.applyEvolution(route, result, newInput);
+        await this.storage.saveRoute(updatedRoute);
+        console.log(`[Pipeline] Evolution applied to route ${route.name}`);
+        return updatedRoute;
+      }
+
+      // Validation failed - prepare retry context
+      console.log(`[Pipeline] Validation failed: ${validation.errors.join(', ')}`);
+
+      context = {
+        ...context,
+        validationFailure: {
+          errors: validation.errors,
+          // Add other routes' triggers on 2nd+ retry
+          otherRoutesTriggers: attempt >= 2
+            ? allRoutes
+                .filter(r => r.id !== route.id)
+                .map(r => ({ routeName: r.name, triggers: r.triggers }))
+            : undefined,
+        },
+      };
+    }
+
+    // All retries exhausted
+    console.log(`[Pipeline] Evolver exhausted all retries for route ${route.name}`);
+    return null;
+  }
+
+  /**
+   * Apply evolution result to a route, preserving version history
+   */
+  private applyEvolution(
+    route: Route,
+    result: { triggers?: import('../types.js').RouteTrigger[]; transform?: string; reasoning: string },
+    evolvedFrom: string
+  ): Route {
+    // Create version entry for current state
+    const currentVersion: RouteVersion = {
+      version: (route.versions?.length || 0) + 1,
+      timestamp: route.lastUsed || route.createdAt,
+      triggers: route.triggers,
+      transformScript: route.transformScript,
+      reason: route.versions?.length
+        ? `Before evolution from: ${evolvedFrom}`
+        : 'Initial creation',
+    };
+
+    // Build updated route
+    return {
+      ...route,
+      triggers: result.triggers || route.triggers,
+      transformScript: result.transform !== undefined ? result.transform : route.transformScript,
+      versions: [
+        ...(route.versions || []),
+        currentVersion,
+        {
+          version: currentVersion.version + 1,
+          timestamp: new Date().toISOString(),
+          triggers: result.triggers || route.triggers,
+          transformScript: result.transform !== undefined ? result.transform : route.transformScript,
+          reason: result.reasoning,
+          evolvedFrom,
+        },
+      ],
+    };
   }
 }
