@@ -443,8 +443,11 @@ export class CapturePipeline {
 
   /**
    * Retry a previously blocked capture (e.g., after OAuth is configured).
+   * Uses the capture's stored username for all operations.
    */
   async retryCapture(capture: Capture): Promise<{ capture: Capture }> {
+    const username = capture.username;
+
     // Re-execute with existing route
     const route = await this.storage.getRoute(capture.routeFinal!);
     if (!route) {
@@ -457,7 +460,7 @@ export class CapturePipeline {
         codeVersion: this.codeVersion,
         durationMs: 0
       });
-      await this.storage.saveCapture(capture, 'default');
+      await this.storage.saveCapture(capture, username);
       return { capture };
     }
 
@@ -465,7 +468,7 @@ export class CapturePipeline {
     const result = await this.executor.execute(
       route,
       capture.parsed?.payload || capture.raw,
-      'default',
+      username,
       capture.parsed?.metadata || {},
       capture.timestamp,
       capture
@@ -489,7 +492,7 @@ export class CapturePipeline {
       durationMs: Date.now() - startTime
     });
 
-    await this.storage.saveCapture(capture, 'default');
+    await this.storage.saveCapture(capture, username);
 
     if (result.success) {
       // Update route's recentItems

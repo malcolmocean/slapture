@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CapturePipeline } from '../../src/pipeline/index.js';
 import { Storage } from '../../src/storage/index.js';
-import { Route } from '../../src/types.js';
+import { Route, Capture } from '../../src/types.js';
 import fs from 'fs';
 
 const TEST_DATA_DIR = './test-pipeline-data';
@@ -91,6 +91,82 @@ describe('CapturePipeline', () => {
       expect(result.capture.executionTrace.some(s => s.step === 'parse')).toBe(true);
       expect(result.capture.executionTrace.some(s => s.step === 'dispatch')).toBe(true);
       expect(result.capture.executionTrace.some(s => s.step === 'execute')).toBe(true);
+    });
+
+    it('should store username on capture object', async () => {
+      const result = await pipeline.process('dump: test capture', 'malcolm');
+      expect(result.capture.username).toBe('malcolm');
+
+      // Verify it's also saved to storage correctly
+      const saved = await storage.getCapture(result.capture.id);
+      expect(saved?.username).toBe('malcolm');
+    });
+  });
+
+  describe('retryCapture', () => {
+    it('should use stored username in retryCapture', async () => {
+      // Create a capture that was blocked (simulating OAuth required scenario)
+      const capture: Capture = {
+        id: 'retry-test',
+        raw: 'dump: retry test',
+        timestamp: new Date().toISOString(),
+        username: 'retryuser',
+        parsed: { explicitRoute: 'dump', payload: 'retry test', metadata: {} },
+        routeProposed: 'route-dump',
+        routeConfidence: 'high',
+        routeFinal: 'route-dump',
+        executionTrace: [],
+        executionResult: 'blocked_needs_auth',
+        verificationState: 'pending',
+        retiredFromTests: false,
+        retiredReason: null,
+      };
+
+      await storage.saveCapture(capture, 'retryuser');
+
+      // Retry should use capture.username, not hardcoded 'default'
+      const result = await pipeline.retryCapture(capture);
+
+      // Verify the capture still has the correct username
+      expect(result.capture.username).toBe('retryuser');
+
+      // Verify the file was written to the user-specific path
+      const fileContent = fs.readFileSync(
+        `${TEST_FILESTORE}/retryuser/dump.txt`,
+        'utf-8'
+      );
+      expect(fileContent).toBe('retry test\n');
+    });
+
+    it('should use stored username when route no longer exists', async () => {
+      // Create a capture with a non-existent route
+      const capture: Capture = {
+        id: 'retry-no-route',
+        raw: 'nonexistent: test',
+        timestamp: new Date().toISOString(),
+        username: 'orphanuser',
+        parsed: { explicitRoute: 'nonexistent', payload: 'test', metadata: {} },
+        routeProposed: 'route-nonexistent',
+        routeConfidence: 'high',
+        routeFinal: 'route-nonexistent',
+        executionTrace: [],
+        executionResult: 'blocked_needs_auth',
+        verificationState: 'pending',
+        retiredFromTests: false,
+        retiredReason: null,
+      };
+
+      await storage.saveCapture(capture, 'orphanuser');
+
+      // Retry should fail gracefully but still use the correct username
+      const result = await pipeline.retryCapture(capture);
+
+      expect(result.capture.executionResult).toBe('failed');
+      expect(result.capture.username).toBe('orphanuser');
+
+      // Verify the capture was saved under the correct user
+      const saved = await storage.getCapture('retry-no-route');
+      expect(saved?.username).toBe('orphanuser');
     });
   });
 });
