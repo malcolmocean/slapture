@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Mastermind } from '../../src/mastermind/index.js';
+import { Mastermind, IntegrationContext } from '../../src/mastermind/index.js';
 import { Route, ParseResult, MastermindAction } from '../../src/types.js';
+import type { IntegrationWithStatus } from '../../src/integrations/registry.js';
 
 // Mock the Anthropic SDK
 vi.mock('@anthropic-ai/sdk', () => ({
@@ -123,6 +124,252 @@ describe('Mastermind', () => {
 
       expect(action.action).toBe('inbox');
       expect(action.reason).toContain('Failed to parse');
+    });
+  });
+
+  describe('integration context in prompt', () => {
+    const parsed: ParseResult = {
+      explicitRoute: null,
+      payload: 'test message',
+      metadata: {},
+    };
+
+    it('should include integrations with connected status', () => {
+      const integrations: IntegrationWithStatus[] = [
+        {
+          id: 'intend',
+          name: 'intend.do',
+          purpose: 'Track daily intentions and goals',
+          authType: 'oauth',
+          status: 'connected',
+        },
+      ];
+
+      const context: IntegrationContext = {
+        integrations,
+        integrationNotes: new Map(),
+        destinationNotes: new Map(),
+      };
+
+      const prompt = mastermind.buildPrompt(
+        existingRoutes,
+        'test message',
+        parsed,
+        'No match',
+        context
+      );
+
+      expect(prompt).toContain('Available Integrations:');
+      expect(prompt).toContain('intend.do: Track daily intentions and goals [connected]');
+    });
+
+    it('should include integrations with expired status', () => {
+      const integrations: IntegrationWithStatus[] = [
+        {
+          id: 'intend',
+          name: 'intend.do',
+          purpose: 'Track daily intentions and goals',
+          authType: 'oauth',
+          status: 'expired',
+        },
+      ];
+
+      const context: IntegrationContext = {
+        integrations,
+        integrationNotes: new Map(),
+        destinationNotes: new Map(),
+      };
+
+      const prompt = mastermind.buildPrompt(
+        existingRoutes,
+        'test message',
+        parsed,
+        'No match',
+        context
+      );
+
+      expect(prompt).toContain('intend.do: Track daily intentions and goals [auth expired]');
+    });
+
+    it('should include integrations with not-connected status', () => {
+      const integrations: IntegrationWithStatus[] = [
+        {
+          id: 'intend',
+          name: 'intend.do',
+          purpose: 'Track daily intentions and goals',
+          authType: 'oauth',
+          status: 'not-connected',
+        },
+      ];
+
+      const context: IntegrationContext = {
+        integrations,
+        integrationNotes: new Map(),
+        destinationNotes: new Map(),
+      };
+
+      const prompt = mastermind.buildPrompt(
+        existingRoutes,
+        'test message',
+        parsed,
+        'No match',
+        context
+      );
+
+      expect(prompt).toContain('intend.do: Track daily intentions and goals [not connected]');
+    });
+
+    it('should show [no auth needed] for integrations with authType none', () => {
+      const integrations: IntegrationWithStatus[] = [
+        {
+          id: 'fs',
+          name: 'Local Files',
+          purpose: 'Append to CSV/JSON/txt files',
+          authType: 'none',
+          status: 'connected',
+        },
+      ];
+
+      const context: IntegrationContext = {
+        integrations,
+        integrationNotes: new Map(),
+        destinationNotes: new Map(),
+      };
+
+      const prompt = mastermind.buildPrompt(
+        existingRoutes,
+        'test message',
+        parsed,
+        'No match',
+        context
+      );
+
+      expect(prompt).toContain('Local Files: Append to CSV/JSON/txt files [no auth needed]');
+    });
+
+    it('should include integration notes when present', () => {
+      const integrations: IntegrationWithStatus[] = [
+        {
+          id: 'intend',
+          name: 'intend.do',
+          purpose: 'Track daily intentions and goals',
+          authType: 'oauth',
+          status: 'connected',
+        },
+      ];
+
+      const integrationNotes = new Map<string, string>();
+      integrationNotes.set('intend', 'I phrase these as verbs, present tense');
+
+      const context: IntegrationContext = {
+        integrations,
+        integrationNotes,
+        destinationNotes: new Map(),
+      };
+
+      const prompt = mastermind.buildPrompt(
+        existingRoutes,
+        'test message',
+        parsed,
+        'No match',
+        context
+      );
+
+      expect(prompt).toContain('Your notes on integrations:');
+      expect(prompt).toContain('intend.do: "I phrase these as verbs, present tense"');
+    });
+
+    it('should not include notes section if no integration notes exist', () => {
+      const integrations: IntegrationWithStatus[] = [
+        {
+          id: 'intend',
+          name: 'intend.do',
+          purpose: 'Track daily intentions and goals',
+          authType: 'oauth',
+          status: 'connected',
+        },
+      ];
+
+      const context: IntegrationContext = {
+        integrations,
+        integrationNotes: new Map(),
+        destinationNotes: new Map(),
+      };
+
+      const prompt = mastermind.buildPrompt(
+        existingRoutes,
+        'test message',
+        parsed,
+        'No match',
+        context
+      );
+
+      expect(prompt).not.toContain('Your notes on integrations:');
+    });
+
+    it('should include destination notes for routes', () => {
+      const integrations: IntegrationWithStatus[] = [];
+
+      const destinationNotes = new Map<string, string>();
+      destinationNotes.set('dump', 'This is for random thoughts');
+
+      const context: IntegrationContext = {
+        integrations,
+        integrationNotes: new Map(),
+        destinationNotes,
+      };
+
+      const prompt = mastermind.buildPrompt(
+        existingRoutes,
+        'test message',
+        parsed,
+        'No match',
+        context
+      );
+
+      expect(prompt).toContain('User note: "This is for random thoughts"');
+    });
+
+    it('should include guidance about notes integration', () => {
+      const integrations: IntegrationWithStatus[] = [
+        {
+          id: 'notes',
+          name: 'Notes',
+          purpose: 'Save notes about integrations and destinations',
+          authType: 'none',
+          status: 'connected',
+        },
+      ];
+
+      const context: IntegrationContext = {
+        integrations,
+        integrationNotes: new Map(),
+        destinationNotes: new Map(),
+      };
+
+      const prompt = mastermind.buildPrompt(
+        existingRoutes,
+        'test message',
+        parsed,
+        'No match',
+        context
+      );
+
+      expect(prompt).toContain('When creating routes, consider which integration best fits the user\'s intent.');
+      expect(prompt).toContain('The "notes" integration lets users save context about other integrations/destinations.');
+    });
+
+    it('should work without integration context (backwards compatible)', () => {
+      const prompt = mastermind.buildPrompt(
+        existingRoutes,
+        'test message',
+        parsed,
+        'No match'
+      );
+
+      expect(prompt).toContain('You are the Slapture Mastermind');
+      expect(prompt).toContain('dump');
+      expect(prompt).not.toContain('Available Integrations:');
     });
   });
 });

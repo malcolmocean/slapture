@@ -1,5 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { Route, ParseResult, MastermindAction } from '../types.js';
+import type { IntegrationWithStatus } from '../integrations/registry.js';
+
+export interface IntegrationContext {
+  integrations: IntegrationWithStatus[];
+  integrationNotes: Map<string, string>;  // integrationId -> note content
+  destinationNotes: Map<string, string>;  // destinationId -> note content
+}
 
 export class Mastermind {
   private client: Anthropic;
@@ -8,11 +15,69 @@ export class Mastermind {
     this.client = new Anthropic({ apiKey });
   }
 
+  /**
+   * Format auth status for display in prompt
+   */
+  private formatAuthStatus(integration: IntegrationWithStatus): string {
+    if (integration.authType === 'none') {
+      return '[no auth needed]';
+    }
+    switch (integration.status) {
+      case 'connected':
+        return '[connected]';
+      case 'expired':
+        return '[auth expired]';
+      case 'not-connected':
+        return '[not connected]';
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Build the integration context section for the prompt
+   */
+  private buildIntegrationSection(context: IntegrationContext): string {
+    const integrationLines = context.integrations.map(i => {
+      const status = this.formatAuthStatus(i);
+      return `- ${i.name}: ${i.purpose} ${status}`;
+    });
+
+    let section = `Available Integrations:
+${integrationLines.join('\n')}`;
+
+    // Add user notes if any exist
+    const notesEntries = Array.from(context.integrationNotes.entries())
+      .filter(([_, note]) => note && note.trim());
+
+    if (notesEntries.length > 0) {
+      const noteLines = notesEntries.map(([integrationId, note]) => {
+        // Find the integration name for this ID
+        const integration = context.integrations.find(i => i.id === integrationId);
+        const name = integration?.name || integrationId;
+        return `- ${name}: "${note}"`;
+      });
+
+      section += `
+
+Your notes on integrations:
+${noteLines.join('\n')}`;
+    }
+
+    section += `
+
+When creating routes, consider which integration best fits the user's intent.
+The "notes" integration lets users save context about other integrations/destinations.`;
+
+    return section;
+  }
+
   buildPrompt(
     routes: Route[],
     raw: string,
     parsed: ParseResult,
-    dispatcherReason: string
+    dispatcherReason: string,
+    integrationContext?: IntegrationContext
   ): string {
     const routeDescriptions = routes
       .map(r => {
@@ -23,14 +88,31 @@ export class Mastermind {
           .slice(0, 3)
           .map(item => `  - "${item.raw}"`)
           .join('\n');
+
+        // Include destination note if available
+        let destinationNote = '';
+        if (integrationContext?.destinationNotes) {
+          // Use route name or destinationConfig as destination ID
+          const destId = r.name;
+          const note = integrationContext.destinationNotes.get(destId);
+          if (note) {
+            destinationNote = `\n  User note: "${note}"`;
+          }
+        }
+
         return `- **${r.name}**: ${r.description}
   Triggers: ${triggers}
-  ${recentExamples ? `Recent:\n${recentExamples}` : ''}`;
+  ${recentExamples ? `Recent:\n${recentExamples}` : ''}${destinationNote}`;
       })
       .join('\n\n');
 
-    return `You are the Slapture Mastermind. You handle captures that couldn't be automatically routed.
+    // Build integration section if context provided
+    const integrationSection = integrationContext
+      ? `\n${this.buildIntegrationSection(integrationContext)}\n`
+      : '';
 
+    return `You are the Slapture Mastermind. You handle captures that couldn't be automatically routed.
+${integrationSection}
 Current routes:
 ${routeDescriptions || '(No routes defined yet)'}
 
@@ -76,9 +158,10 @@ Respond with JSON only.`;
     routes: Route[],
     raw: string,
     parsed: ParseResult,
-    dispatcherReason: string
+    dispatcherReason: string,
+    integrationContext?: IntegrationContext
   ): Promise<{ action: MastermindAction; promptUsed: string }> {
-    const prompt = this.buildPrompt(routes, raw, parsed, dispatcherReason);
+    const prompt = this.buildPrompt(routes, raw, parsed, dispatcherReason, integrationContext);
 
     try {
       const response = await this.client.messages.create({

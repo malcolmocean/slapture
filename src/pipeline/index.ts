@@ -5,9 +5,10 @@ import { Storage } from '../storage/index.js';
 import { Parser } from '../parser/index.js';
 import { Dispatcher } from '../dispatcher/index.js';
 import { RouteExecutor } from '../routes/executor.js';
-import { Mastermind } from '../mastermind/index.js';
+import { Mastermind, IntegrationContext } from '../mastermind/index.js';
 import { Evolver, EvolverContext } from '../mastermind/evolver.js';
 import { createEvolverTestCase } from '../mastermind/evolver-ratchet.js';
+import { getIntegrationsWithStatus, INTEGRATIONS } from '../integrations/registry.js';
 
 export interface PipelineResult {
   capture: Capture;
@@ -84,11 +85,16 @@ export class CapturePipeline {
       if (!route) {
         console.log(`[Pipeline] No route matched, consulting Mastermind for: "${raw}"`);
         const mastermindStart = Date.now();
+
+        // Gather integration context for the Mastermind
+        const integrationContext = await this.gatherIntegrationContext(username, routes);
+
         const { action, promptUsed } = await this.mastermind.consult(
           routes,
           raw,
           parsed,
-          dispatchResult.reason
+          dispatchResult.reason,
+          integrationContext
         );
         // Store both the dynamic input context and the full prompt for retroactive replay
         // Include full route snapshots as shown to the LLM (name, description, triggers, recent items)
@@ -217,6 +223,42 @@ export class CapturePipeline {
       codeVersion: this.codeVersion,
       durationMs: Date.now() - startTime,
     });
+  }
+
+  /**
+   * Gather integration context for the Mastermind prompt.
+   * This provides information about available integrations and user notes.
+   */
+  private async gatherIntegrationContext(
+    username: string,
+    routes: Route[]
+  ): Promise<IntegrationContext> {
+    // Get integrations with their current auth status
+    const integrations = await getIntegrationsWithStatus(this.storage, username);
+
+    // Gather integration notes
+    const integrationNotes = new Map<string, string>();
+    for (const integration of INTEGRATIONS) {
+      const note = await this.storage.getIntegrationNote(username, integration.id);
+      if (note) {
+        integrationNotes.set(integration.id, note);
+      }
+    }
+
+    // Gather destination notes (keyed by route name)
+    const destinationNotes = new Map<string, string>();
+    for (const route of routes) {
+      const note = await this.storage.getDestinationNote(username, route.name);
+      if (note) {
+        destinationNotes.set(route.name, note);
+      }
+    }
+
+    return {
+      integrations,
+      integrationNotes,
+      destinationNotes,
+    };
   }
 
   /**
