@@ -27,15 +27,17 @@ describe('IntendClient', () => {
 
       const result = await client.addIntention('buy groceries');
 
+      // API format: POST /api/v0/u/me/intentions with { raw: "X) text" }
+      // where X is goal (1-9) or & for ungrouped
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://intend.do/api/intentions',
+        'https://intend.do/api/v0/u/me/intentions',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
             'Authorization': 'Bearer test-token',
             'Content-Type': 'application/json'
           }),
-          body: JSON.stringify({ text: 'buy groceries' })
+          body: JSON.stringify({ raw: '&) buy groceries' })
         })
       );
       expect(result.success).toBe(true);

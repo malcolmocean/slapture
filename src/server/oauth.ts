@@ -2,10 +2,62 @@ import type { FastifyInstance } from 'fastify';
 import type { Storage } from '../storage/index.js';
 
 export interface OAuthConfig {
-  intendClientId: string;
-  intendClientSecret: string;
+  intendClientId?: string;
+  intendClientSecret?: string;
   intendBaseUrl: string;
   callbackBaseUrl: string;
+}
+
+interface DynamicClientCredentials {
+  client_id: string;
+  client_secret: string;
+}
+
+// Cache for dynamically registered client credentials
+let dynamicClientCache: DynamicClientCredentials | null = null;
+
+async function getOrRegisterClient(config: OAuthConfig): Promise<DynamicClientCredentials> {
+  // If static credentials provided, use them
+  if (config.intendClientId && config.intendClientSecret) {
+    return {
+      client_id: config.intendClientId,
+      client_secret: config.intendClientSecret
+    };
+  }
+
+  // If we have cached dynamic credentials, use them
+  if (dynamicClientCache) {
+    return dynamicClientCache;
+  }
+
+  // Dynamically register the client
+  console.log('[OAuth] Registering dynamic OAuth client with intend.do');
+  const redirectUri = `${config.callbackBaseUrl}/oauth/callback/intend`;
+
+  const registerResponse = await fetch(`${config.intendBaseUrl}/oauth/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      client_name: 'Slapture Capture System',
+      redirect_uris: [redirectUri],
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      scope: 'mcp:tools'
+    })
+  });
+
+  if (!registerResponse.ok) {
+    const errorText = await registerResponse.text();
+    throw new Error(`Dynamic client registration failed: ${registerResponse.status} ${errorText}`);
+  }
+
+  const clientData = await registerResponse.json() as DynamicClientCredentials;
+  console.log('[OAuth] Successfully registered dynamic client:', clientData.client_id);
+
+  dynamicClientCache = clientData;
+  return clientData;
 }
 
 export function buildOAuthRoutes(
@@ -16,14 +68,20 @@ export function buildOAuthRoutes(
 
   // Initiate OAuth flow
   app.get('/connect/intend', async (request, reply) => {
-    const redirectUri = `${config.callbackBaseUrl}/oauth/callback/intend`;
-    const authorizeUrl = new URL(`${config.intendBaseUrl}/oauth/authorize`);
-    authorizeUrl.searchParams.set('client_id', config.intendClientId);
-    authorizeUrl.searchParams.set('redirect_uri', redirectUri);
-    authorizeUrl.searchParams.set('response_type', 'code');
-    authorizeUrl.searchParams.set('scope', 'intentions:write');
+    try {
+      const credentials = await getOrRegisterClient(config);
+      const redirectUri = `${config.callbackBaseUrl}/oauth/callback/intend`;
+      const authorizeUrl = new URL(`${config.intendBaseUrl}/oauth/authorize`);
+      authorizeUrl.searchParams.set('client_id', credentials.client_id);
+      authorizeUrl.searchParams.set('redirect_uri', redirectUri);
+      authorizeUrl.searchParams.set('response_type', 'code');
+      authorizeUrl.searchParams.set('scope', 'mcp:tools');
 
-    return reply.redirect(authorizeUrl.toString());
+      return reply.redirect(authorizeUrl.toString());
+    } catch (error) {
+      console.error('[OAuth] Failed to initiate OAuth flow:', error);
+      return reply.redirect('/oauth/error?reason=registration_failed');
+    }
   });
 
   // OAuth callback
@@ -35,6 +93,7 @@ export function buildOAuthRoutes(
     }
 
     try {
+      const credentials = await getOrRegisterClient(config);
       const redirectUri = `${config.callbackBaseUrl}/oauth/callback/intend`;
       const tokenResponse = await fetch(`${config.intendBaseUrl}/oauth/token`, {
         method: 'POST',
@@ -45,13 +104,14 @@ export function buildOAuthRoutes(
           grant_type: 'authorization_code',
           code,
           redirect_uri: redirectUri,
-          client_id: config.intendClientId,
-          client_secret: config.intendClientSecret
+          client_id: credentials.client_id,
+          client_secret: credentials.client_secret
         })
       });
 
       if (!tokenResponse.ok) {
-        console.error('[OAuth] Token exchange failed:', tokenResponse.status);
+        const errorText = await tokenResponse.text();
+        console.error('[OAuth] Token exchange failed:', tokenResponse.status, errorText);
         return reply.redirect('/oauth/error?reason=token_exchange_failed');
       }
 

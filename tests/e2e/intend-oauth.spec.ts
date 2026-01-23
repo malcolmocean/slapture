@@ -10,38 +10,35 @@ test.describe('intend.do OAuth Integration', () => {
 
   test.beforeEach(async ({ request }) => {
     // Clear any existing intend tokens
-    await request.post('http://localhost:3000/disconnect/intend?token=dev-token');
+    await request.post('http://localhost:3333/disconnect/intend?token=dev-token');
   });
 
   test('complete OAuth flow and route capture', async ({ page, request }) => {
     // 1. Start OAuth flow
-    await page.goto('http://localhost:3000/connect/intend');
+    await page.goto('http://localhost:3333/connect/intend');
 
     // 2. Should redirect to intend.do login
     await expect(page).toHaveURL(/intend\.do/);
 
     // 3. Log in with test credentials
-    await page.fill('input[name="username"], input[type="text"]', TEST_USERNAME);
-    await page.fill('input[name="password"], input[type="password"]', TEST_PASSWORD);
-    await page.click('button[type="submit"], input[type="submit"]');
+    await page.getByRole('textbox', { name: 'username' }).fill(TEST_USERNAME);
+    await page.getByRole('textbox', { name: 'password' }).fill(TEST_PASSWORD);
+    await page.getByRole('button', { name: 'Log in' }).click();
 
-    // 4. Approve OAuth (if approval screen shown)
-    const approveButton = page.locator('button:has-text("Approve"), button:has-text("Allow")');
-    if (await approveButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await approveButton.click();
-    }
+    // 4. Wait for and click Allow on OAuth consent screen
+    await page.getByRole('button', { name: 'Allow' }).click();
 
     // 5. Should redirect back to success page
-    await expect(page).toHaveURL(/localhost:3000.*oauth\/success/);
+    await expect(page).toHaveURL(/localhost:3333.*oauth\/success/, { timeout: 10000 });
     await expect(page.locator('body')).toContainText('Connected');
 
     // 6. Verify auth status shows connected
-    const statusResponse = await request.get('http://localhost:3000/auth/status/intend?token=dev-token');
+    const statusResponse = await request.get('http://localhost:3333/auth/status/intend?token=dev-token');
     const status = await statusResponse.json();
     expect(status.connected).toBe(true);
 
     // 7. Send a capture to intend route
-    const captureResponse = await request.post('http://localhost:3000/capture?token=dev-token', {
+    const captureResponse = await request.post('http://localhost:3333/capture?token=dev-token', {
       data: { text: 'intend: prepare amazon returns for tomorrow morning' }
     });
     const captureResult = await captureResponse.json();
@@ -49,7 +46,7 @@ test.describe('intend.do OAuth Integration', () => {
 
     // 8. Verify capture executed successfully
     const captureStatusResponse = await request.get(
-      `http://localhost:3000/status/${captureResult.captureId}?token=dev-token`
+      `http://localhost:3333/status/${captureResult.captureId}?token=dev-token`
     );
     const capture = await captureStatusResponse.json();
     expect(capture.executionResult).toBe('success');
@@ -59,19 +56,19 @@ test.describe('intend.do OAuth Integration', () => {
     // 1. Clear tokens (done in beforeEach)
 
     // 2. Verify not connected
-    const statusResponse = await request.get('http://localhost:3000/auth/status/intend?token=dev-token');
+    const statusResponse = await request.get('http://localhost:3333/auth/status/intend?token=dev-token');
     const status = await statusResponse.json();
     expect(status.connected).toBe(false);
 
     // 3. Send capture - should be blocked
-    const captureResponse = await request.post('http://localhost:3000/capture?token=dev-token', {
+    const captureResponse = await request.post('http://localhost:3333/capture?token=dev-token', {
       data: { text: 'intend: buy groceries' }
     });
     const captureResult = await captureResponse.json();
 
     // 4. Verify blocked
     const captureStatusResponse = await request.get(
-      `http://localhost:3000/status/${captureResult.captureId}?token=dev-token`
+      `http://localhost:3333/status/${captureResult.captureId}?token=dev-token`
     );
     const capture = await captureStatusResponse.json();
     expect(capture.executionResult).toBe('blocked_needs_auth');
@@ -79,40 +76,37 @@ test.describe('intend.do OAuth Integration', () => {
 
   test('blocked capture retryable after OAuth', async ({ page, request }) => {
     // 1. Create blocked capture first
-    const captureResponse = await request.post('http://localhost:3000/capture?token=dev-token', {
+    const captureResponse = await request.post('http://localhost:3333/capture?token=dev-token', {
       data: { text: 'intend: test retry functionality' }
     });
     const captureResult = await captureResponse.json();
     const captureId = captureResult.captureId;
 
     // Verify blocked
-    let statusResp = await request.get(`http://localhost:3000/status/${captureId}?token=dev-token`);
+    let statusResp = await request.get(`http://localhost:3333/status/${captureId}?token=dev-token`);
     let capture = await statusResp.json();
     expect(capture.executionResult).toBe('blocked_needs_auth');
 
     // 2. Complete OAuth flow
-    await page.goto('http://localhost:3000/connect/intend');
+    await page.goto('http://localhost:3333/connect/intend');
     await expect(page).toHaveURL(/intend\.do/);
-    await page.fill('input[name="username"], input[type="text"]', TEST_USERNAME);
-    await page.fill('input[name="password"], input[type="password"]', TEST_PASSWORD);
-    await page.click('button[type="submit"], input[type="submit"]');
+    await page.getByRole('textbox', { name: 'username' }).fill(TEST_USERNAME);
+    await page.getByRole('textbox', { name: 'password' }).fill(TEST_PASSWORD);
+    await page.getByRole('button', { name: 'Log in' }).click();
 
-    const approveButton = page.locator('button:has-text("Approve"), button:has-text("Allow")');
-    if (await approveButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await approveButton.click();
-    }
+    await page.getByRole('button', { name: 'Allow' }).click();
 
-    await expect(page).toHaveURL(/localhost:3000.*oauth\/success/);
+    await expect(page).toHaveURL(/localhost:3333.*oauth\/success/, { timeout: 10000 });
 
     // 3. Retry blocked capture
     const retryResponse = await request.post(
-      `http://localhost:3000/retry/${captureId}?token=dev-token`
+      `http://localhost:3333/retry/${captureId}?token=dev-token`
     );
     const retryResult = await retryResponse.json();
     expect(retryResult.capture.executionResult).toBe('success');
 
     // 4. Verify in blocked list is now empty
-    const blockedResponse = await request.get('http://localhost:3000/captures/blocked?token=dev-token');
+    const blockedResponse = await request.get('http://localhost:3333/captures/blocked?token=dev-token');
     const blocked = await blockedResponse.json();
     const stillBlocked = blocked.filter((c: any) => c.id === captureId);
     expect(stillBlocked.length).toBe(0);

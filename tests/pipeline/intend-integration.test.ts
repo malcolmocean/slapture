@@ -75,11 +75,12 @@ describe('Pipeline Intend Integration', () => {
     const result = await pipeline.process('intend: buy groceries', 'default');
 
     expect(result.capture.executionResult).toBe('success');
+    // API format: POST /api/v0/u/me/intentions with { raw: "X) text" }
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://intend.do/api/intentions',
+      'https://intend.do/api/v0/u/me/intentions',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ text: 'buy groceries' })
+        body: JSON.stringify({ raw: '&) buy groceries' })
       })
     );
   });

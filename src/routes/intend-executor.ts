@@ -1,6 +1,6 @@
-import type { Route, Capture } from '../types';
-import type { Storage } from '../storage';
-import { IntendClient } from '../integrations/intend';
+import type { Route, Capture } from '../types.js';
+import type { Storage } from '../storage/index.js';
+import { IntendClient } from '../integrations/intend.js';
 
 export interface IntendExecutionResult {
   status: 'success' | 'failed' | 'blocked_needs_auth' | 'blocked_auth_expired';

@@ -3,11 +3,11 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/e2e',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://localhost:3333',
   },
   webServer: {
     command: 'pnpm start',
-    url: 'http://localhost:3000',
+    url: 'http://localhost:3333',
     reuseExistingServer: !process.env.CI,
     env: {
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || 'test-key',
