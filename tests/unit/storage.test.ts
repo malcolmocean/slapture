@@ -256,6 +256,100 @@ describe('Storage', () => {
     });
   });
 
+  describe('Username validation', () => {
+    it('should reject usernames with forward slash', async () => {
+      const tokens: IntendTokens = {
+        accessToken: 'test',
+        refreshToken: 'refresh',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      };
+
+      await expect(storage.saveIntendTokens('../evil', tokens)).rejects.toThrow('Invalid username');
+    });
+
+    it('should reject usernames with backslash', async () => {
+      const tokens: IntendTokens = {
+        accessToken: 'test',
+        refreshToken: 'refresh',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      };
+
+      await expect(storage.saveIntendTokens('..\\evil', tokens)).rejects.toThrow('Invalid username');
+    });
+
+    it('should reject username that is just ".."', async () => {
+      const tokens: IntendTokens = {
+        accessToken: 'test',
+        refreshToken: 'refresh',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      };
+
+      await expect(storage.saveIntendTokens('..', tokens)).rejects.toThrow('Invalid username');
+    });
+
+    it('should reject username that is just "."', async () => {
+      const tokens: IntendTokens = {
+        accessToken: 'test',
+        refreshToken: 'refresh',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      };
+
+      await expect(storage.saveIntendTokens('.', tokens)).rejects.toThrow('Invalid username');
+    });
+
+    it('should reject empty username', async () => {
+      const tokens: IntendTokens = {
+        accessToken: 'test',
+        refreshToken: 'refresh',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      };
+
+      await expect(storage.saveIntendTokens('', tokens)).rejects.toThrow('Invalid username');
+    });
+
+    it('should reject path traversal in capture username', async () => {
+      const capture: Capture = {
+        id: 'test-id',
+        raw: 'test',
+        timestamp: new Date().toISOString(),
+        username: '../evil',
+        parsed: null,
+        routeProposed: null,
+        routeConfidence: null,
+        routeFinal: null,
+        executionTrace: [],
+        executionResult: 'pending',
+        verificationState: 'pending',
+        retiredFromTests: false,
+        retiredReason: null,
+      };
+
+      await expect(storage.saveCapture(capture, '../evil')).rejects.toThrow('Invalid username');
+    });
+
+    it('should accept valid usernames', async () => {
+      const tokens: IntendTokens = {
+        accessToken: 'test',
+        refreshToken: 'refresh',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      };
+
+      // These should not throw
+      await storage.saveIntendTokens('validuser', tokens);
+      await storage.saveIntendTokens('user-with-dashes', tokens);
+      await storage.saveIntendTokens('user_with_underscores', tokens);
+      await storage.saveIntendTokens('user123', tokens);
+
+      expect(await storage.getIntendTokens('validuser')).not.toBeNull();
+    });
+  });
+
   describe('Per-user token storage', () => {
     it('should save and retrieve tokens for specific user', async () => {
       const tokens: IntendTokens = {

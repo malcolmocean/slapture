@@ -27,6 +27,7 @@ export class Storage {
   }
 
   private ensureUserCapturesDir(username: string): string {
+    this.validateUsername(username);
     const userDir = path.join(this.dataDir, 'captures', username);
     if (!fs.existsSync(userDir)) {
       fs.mkdirSync(userDir, { recursive: true });
@@ -238,7 +239,14 @@ export class Storage {
   }
 
   // Per-user config management
+  private validateUsername(username: string): void {
+    if (!username || typeof username !== 'string' || username.includes('/') || username.includes('\\') || username === '..' || username === '.') {
+      throw new Error('Invalid username');
+    }
+  }
+
   private ensureUserDir(username: string): string {
+    this.validateUsername(username);
     const userDir = path.join(this.dataDir, 'users', username);
     if (!fs.existsSync(userDir)) {
       fs.mkdirSync(userDir, { recursive: true });
