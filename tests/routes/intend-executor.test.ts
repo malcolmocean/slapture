@@ -46,7 +46,8 @@ describe('IntendExecutor', () => {
     executionResult: 'pending',
     verificationState: 'pending',
     retiredFromTests: false,
-    retiredReason: null
+    retiredReason: null,
+    username: 'default'
   });
 
   it('should return blocked_needs_auth when no tokens configured', async () => {
