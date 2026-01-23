@@ -105,6 +105,13 @@ export interface IntendTokens {
   baseUrl: string;
 }
 
+export interface Integration {
+  id: string;                    // 'intend', 'fs', 'notes'
+  name: string;                  // 'intend.do', 'Local Files', 'Notes'
+  purpose: string;               // "Track daily intentions, todos, goals"
+  authType: 'oauth' | 'api-key' | 'none';
+}
+
 export interface IntegrationConfig {
   intend?: IntendTokens;
 }
