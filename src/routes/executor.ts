@@ -2,6 +2,7 @@
 import { Route, Capture } from '../types.js';
 import { Storage } from '../storage/index.js';
 import { IntendExecutor } from './intend-executor.js';
+import { NotesExecutor } from './notes-executor.js';
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
@@ -16,11 +17,13 @@ export class RouteExecutor {
   private filestoreRoot: string;
   private storage: Storage | null;
   private intendExecutor: IntendExecutor | null;
+  private notesExecutor: NotesExecutor | null;
 
   constructor(filestoreRoot: string = './filestore', storage?: Storage) {
     this.filestoreRoot = filestoreRoot;
     this.storage = storage || null;
     this.intendExecutor = storage ? new IntendExecutor(storage) : null;
+    this.notesExecutor = storage ? new NotesExecutor(storage) : null;
   }
 
   async execute(
@@ -45,6 +48,23 @@ export class RouteExecutor {
         success: intendResult.status === 'success',
         status: intendResult.status,
         error: intendResult.error,
+      };
+    }
+
+    // Handle notes destination type
+    if (route.destinationType === 'notes') {
+      if (!this.notesExecutor || !capture) {
+        return {
+          success: false,
+          status: 'failed',
+          error: 'NotesExecutor not configured or capture not provided',
+        };
+      }
+      const notesResult = await this.notesExecutor.execute(route, capture);
+      return {
+        success: notesResult.status === 'success',
+        status: notesResult.status,
+        error: notesResult.error,
       };
     }
 
