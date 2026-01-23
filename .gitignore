@@ -5,3 +5,4 @@ filestore/
 test-*-data/
 test-*-filestore/
 .env
+.DS_Store

@@ -1,0 +1,27 @@
+definitely:
+- bookantt
+  - sample inputs
+    - 15mins Ferber
+    - 20 ferber yesterday
+    - 10 heart of firm jan11
+  - destination
+    - find specific cell in a spreadsheet
+      - sheet will match year
+      - row will fuzzy match book/author
+      - col will match date
+    - write number to cell
+    - this can't be fully programmatic, because of fuzzy matching
+      - but it could send the list of books+authors to haiku, indexed, with input, and haiku just says "row 56" or "unsure" or "not found"
+  - this is a fantastic test-case for whether the mastermind is able to really solve problems
+    - like maybe I should even something like, have one AI write a really clear test for this (with a test/dummy bookantt I don't mind nuking)
+    - and then have another AI that isn't allowed to modify that test iterate on the other prompts until it can test that
+    
+- weight
+- gwen memories
+- beeminder
+- QS: time I woke up? idk
+- context-specific reminders (still gotta solve getting them *out* but still)
+- something that prints off a note at home or something
+
+maybe:
+- workouts?
