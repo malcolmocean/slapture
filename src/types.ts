@@ -62,6 +62,11 @@ export interface RouteVersion {
   evolvedFrom?: string; // The input that triggered evolution
 }
 
+export interface NotesDestinationConfig {
+  target: 'integration' | 'destination';
+  id: string;
+}
+
 export interface Route {
   id: string;
   name: string;
@@ -72,10 +77,11 @@ export interface Route {
   schema: string | null;
   recentItems: CaptureRef[];
 
-  destinationType: 'fs' | 'intend';
+  destinationType: 'fs' | 'intend' | 'notes';
   destinationConfig:
-    | { filePath: string }  // fs
-    | { baseUrl: string };  // intend
+    | { filePath: string }           // fs
+    | { baseUrl: string }            // intend
+    | NotesDestinationConfig;        // notes
   transformScript: string | null;
 
   createdAt: string;

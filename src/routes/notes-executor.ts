@@ -1,16 +1,11 @@
 // src/routes/notes-executor.ts
-import type { Route, Capture } from '../types.js';
+import type { Route, Capture, NotesDestinationConfig } from '../types.js';
 import type { Storage } from '../storage/index.js';
 
 export interface NotesExecutionResult {
   status: 'success' | 'failed' | 'blocked_needs_auth' | 'blocked_auth_expired';
   error?: string;
   data?: unknown;
-}
-
-interface NotesDestinationConfig {
-  target: 'integration' | 'destination';
-  id: string;
 }
 
 const REPLACE_PREFIX = 'REPLACE:';
@@ -23,9 +18,8 @@ export class NotesExecutor {
   }
 
   async execute(route: Route, capture: Capture): Promise<NotesExecutionResult> {
-    // Note: Route type doesn't include 'notes' destination yet (Task 5)
-    // Cast through unknown to handle this until types are updated
-    const config = route.destinationConfig as unknown as NotesDestinationConfig;
+    // Type assertion needed since TypeScript doesn't narrow destinationConfig based on destinationType
+    const config = route.destinationConfig as NotesDestinationConfig;
     const username = capture.username;
 
     // Extract payload from capture
