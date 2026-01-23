@@ -350,6 +350,135 @@ describe('Storage', () => {
     });
   });
 
+  describe('Token migration', () => {
+    it('should migrate global tokens to default user on first access', async () => {
+      // Setup: write tokens in old global format
+      const globalConfig = {
+        authToken: 'dev-token',
+        requireApproval: false,
+        integrations: {
+          intend: {
+            accessToken: 'old-global-token',
+            refreshToken: 'old-refresh',
+            expiresAt: '2030-01-01T00:00:00Z',
+            baseUrl: 'https://intend.do'
+          }
+        }
+      };
+      fs.writeFileSync(
+        path.join(TEST_DATA_DIR, 'config.json'),
+        JSON.stringify(globalConfig, null, 2)
+      );
+
+      // Trigger migration
+      await storage.migrateGlobalTokensIfNeeded();
+
+      // Verify tokens moved to default user
+      const userTokens = await storage.getIntendTokens('default');
+      expect(userTokens?.accessToken).toBe('old-global-token');
+
+      // Verify global config no longer has tokens
+      const newGlobalConfig = JSON.parse(
+        fs.readFileSync(path.join(TEST_DATA_DIR, 'config.json'), 'utf-8')
+      );
+      expect(newGlobalConfig.integrations?.intend).toBeUndefined();
+    });
+
+    it('should not migrate if already migrated', async () => {
+      // Setup: user already has tokens
+      await storage.saveIntendTokens('default', {
+        accessToken: 'user-token',
+        refreshToken: 'refresh',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      });
+
+      // Old global config with different token
+      const globalConfig = {
+        authToken: 'dev-token',
+        integrations: {
+          intend: {
+            accessToken: 'should-not-overwrite',
+            refreshToken: 'old',
+            expiresAt: '2030-01-01T00:00:00Z',
+            baseUrl: 'https://intend.do'
+          }
+        }
+      };
+      fs.writeFileSync(
+        path.join(TEST_DATA_DIR, 'config.json'),
+        JSON.stringify(globalConfig, null, 2)
+      );
+
+      await storage.migrateGlobalTokensIfNeeded();
+
+      // User tokens should be unchanged
+      const userTokens = await storage.getIntendTokens('default');
+      expect(userTokens?.accessToken).toBe('user-token');
+    });
+
+    it('should clean up global config when user tokens already exist', async () => {
+      // Setup: user already has tokens
+      await storage.saveIntendTokens('default', {
+        accessToken: 'user-token',
+        refreshToken: 'refresh',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      });
+
+      // Old global config with different token
+      const globalConfig = {
+        authToken: 'dev-token',
+        integrations: {
+          intend: {
+            accessToken: 'should-not-overwrite',
+            refreshToken: 'old',
+            expiresAt: '2030-01-01T00:00:00Z',
+            baseUrl: 'https://intend.do'
+          }
+        }
+      };
+      fs.writeFileSync(
+        path.join(TEST_DATA_DIR, 'config.json'),
+        JSON.stringify(globalConfig, null, 2)
+      );
+
+      await storage.migrateGlobalTokensIfNeeded();
+
+      // Global config should have integrations cleaned up
+      const newGlobalConfig = JSON.parse(
+        fs.readFileSync(path.join(TEST_DATA_DIR, 'config.json'), 'utf-8')
+      );
+      expect(newGlobalConfig.integrations?.intend).toBeUndefined();
+    });
+
+    it('should do nothing when no global config exists', async () => {
+      // No setup - no global config file
+      await storage.migrateGlobalTokensIfNeeded();
+
+      // Should not throw, and no tokens exist
+      const tokens = await storage.getIntendTokens('default');
+      expect(tokens).toBeNull();
+    });
+
+    it('should do nothing when global config has no intend tokens', async () => {
+      const globalConfig = {
+        authToken: 'dev-token',
+        requireApproval: false
+      };
+      fs.writeFileSync(
+        path.join(TEST_DATA_DIR, 'config.json'),
+        JSON.stringify(globalConfig, null, 2)
+      );
+
+      await storage.migrateGlobalTokensIfNeeded();
+
+      // Should not throw, and no tokens exist
+      const tokens = await storage.getIntendTokens('default');
+      expect(tokens).toBeNull();
+    });
+  });
+
   describe('Per-user token storage', () => {
     it('should save and retrieve tokens for specific user', async () => {
       const tokens: IntendTokens = {

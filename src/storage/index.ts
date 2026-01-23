@@ -301,4 +301,44 @@ export class Storage {
       c.executionResult === 'blocked_auth_expired'
     );
   }
+
+  // Migration: move global tokens to per-user format
+  async migrateGlobalTokensIfNeeded(): Promise<void> {
+    const globalConfigPath = path.join(this.dataDir, 'config.json');
+    if (!fs.existsSync(globalConfigPath)) {
+      return;
+    }
+
+    const globalConfig = JSON.parse(fs.readFileSync(globalConfigPath, 'utf-8'));
+    const globalTokens = globalConfig.integrations?.intend;
+
+    if (!globalTokens) {
+      return; // Nothing to migrate
+    }
+
+    // Check if default user already has tokens (don't overwrite)
+    const existingUserTokens = await this.getIntendTokens('default');
+    if (existingUserTokens) {
+      // Just clean up global config
+      delete globalConfig.integrations.intend;
+      if (Object.keys(globalConfig.integrations).length === 0) {
+        delete globalConfig.integrations;
+      }
+      fs.writeFileSync(globalConfigPath, JSON.stringify(globalConfig, null, 2));
+      console.log('[Migration] Removed stale global tokens (user tokens exist)');
+      return;
+    }
+
+    // Migrate to default user
+    await this.saveIntendTokens('default', globalTokens);
+
+    // Clean up global config
+    delete globalConfig.integrations.intend;
+    if (Object.keys(globalConfig.integrations).length === 0) {
+      delete globalConfig.integrations;
+    }
+    fs.writeFileSync(globalConfigPath, JSON.stringify(globalConfig, null, 2));
+
+    console.log('[Migration] Migrated global tokens to user: default');
+  }
 }
