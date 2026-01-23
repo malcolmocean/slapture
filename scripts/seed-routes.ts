@@ -41,6 +41,20 @@ async function seed() {
       createdBy: 'user',
       lastUsed: null,
     },
+    {
+      id: 'route-note-on-intend',
+      name: 'note-on-intend',
+      description: 'Save notes about the intend integration',
+      triggers: [{ type: 'prefix', pattern: 'note on intend', priority: 20 }],
+      schema: null,
+      recentItems: [],
+      destinationType: 'notes',
+      destinationConfig: { target: 'integration', id: 'intend' },
+      transformScript: null,
+      createdAt: new Date().toISOString(),
+      createdBy: 'user',
+      lastUsed: null,
+    },
   ];
 
   for (const route of routes) {

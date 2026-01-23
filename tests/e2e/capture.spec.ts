@@ -88,6 +88,51 @@ test.describe('Example Set E: Error handling', () => {
   });
 });
 
+test.describe('Example Set F: Integration notes', () => {
+  const NOTES_DIR = './data/users/default/notes/integrations';
+
+  test.beforeEach(async () => {
+    // Clean the integration notes directory
+    if (fs.existsSync(NOTES_DIR)) {
+      fs.rmSync(NOTES_DIR, { recursive: true, force: true });
+    }
+  });
+
+  test('note on intend: saves to integration notes', async ({ request }) => {
+    const response = await request.post(`/capture?token=${TOKEN}`, {
+      data: { text: 'note on intend: I use present tense verbs' },
+    });
+
+    expect(response.ok()).toBeTruthy();
+    const body = await response.json();
+    expect(body.status).toBe('success');
+
+    // Verify the note was saved to the correct location
+    const notePath = path.join(NOTES_DIR, 'intend.txt');
+    expect(fs.existsSync(notePath)).toBe(true);
+    const content = fs.readFileSync(notePath, 'utf-8');
+    expect(content).toContain('I use present tense verbs');
+  });
+
+  test('multiple notes on same integration append', async ({ request }) => {
+    // First note
+    await request.post(`/capture?token=${TOKEN}`, {
+      data: { text: 'note on intend: First note' },
+    });
+
+    // Second note
+    await request.post(`/capture?token=${TOKEN}`, {
+      data: { text: 'note on intend: Second note' },
+    });
+
+    // Verify both notes are present
+    const notePath = path.join(NOTES_DIR, 'intend.txt');
+    const content = fs.readFileSync(notePath, 'utf-8');
+    expect(content).toContain('First note');
+    expect(content).toContain('Second note');
+  });
+});
+
 test.describe('API Endpoints', () => {
   test('GET /routes returns route list', async ({ request }) => {
     const response = await request.get(`/routes?token=${TOKEN}`);
