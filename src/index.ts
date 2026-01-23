@@ -15,6 +15,7 @@ async function main() {
   }
 
   const storage = new Storage(DATA_DIR);
+  await storage.migrateGlobalTokensIfNeeded();
   const server = await buildServer(storage, FILESTORE_DIR, ANTHROPIC_API_KEY);
 
   try {
