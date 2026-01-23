@@ -122,6 +122,30 @@ describe('Storage', () => {
     });
   });
 
+  describe('Capture username field', () => {
+    it('should store and retrieve capture with username', async () => {
+      const capture: Capture = {
+        id: 'test-id',
+        raw: 'test',
+        timestamp: new Date().toISOString(),
+        username: 'malcolm',  // New field
+        parsed: null,
+        routeProposed: null,
+        routeConfidence: null,
+        routeFinal: null,
+        executionTrace: [],
+        executionResult: 'pending',
+        verificationState: 'pending',
+        retiredFromTests: false,
+        retiredReason: null,
+      };
+
+      await storage.saveCapture(capture, 'malcolm');
+      const retrieved = await storage.getCapture('test-id');
+      expect(retrieved?.username).toBe('malcolm');
+    });
+  });
+
   describe('Integration Storage', () => {
     it('should save and retrieve intend tokens', async () => {
       const tokens: IntendTokens = {

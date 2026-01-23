@@ -2,6 +2,7 @@ export interface Capture {
   id: string;
   raw: string;
   timestamp: string;
+  username: string;
 
   parsed: {
     explicitRoute: string | null;

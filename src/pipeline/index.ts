@@ -43,6 +43,7 @@ export class CapturePipeline {
       id: uuidv4(),
       raw,
       timestamp: new Date().toISOString(),
+      username,
       parsed: null,
       routeProposed: null,
       routeConfidence: null,
