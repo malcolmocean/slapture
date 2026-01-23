@@ -534,4 +534,140 @@ describe('Storage', () => {
       expect((await storage.getIntendTokens('user2'))?.accessToken).toBe('token2');
     });
   });
+
+  describe('Integration Notes', () => {
+    it('should save and retrieve an integration note', async () => {
+      const noteContent = 'This is my note about the intend integration';
+      await storage.saveIntegrationNote('malcolm', 'intend', noteContent);
+
+      const retrieved = await storage.getIntegrationNote('malcolm', 'intend');
+      expect(retrieved).toBe(noteContent);
+    });
+
+    it('should return null for non-existent integration note', async () => {
+      const note = await storage.getIntegrationNote('malcolm', 'nonexistent');
+      expect(note).toBeNull();
+    });
+
+    it('should store integration notes in correct path', async () => {
+      await storage.saveIntegrationNote('testuser', 'slack', 'Slack integration note');
+
+      const notePath = path.join(TEST_DATA_DIR, 'users', 'testuser', 'notes', 'integrations', 'slack.txt');
+      expect(fs.existsSync(notePath)).toBe(true);
+      expect(fs.readFileSync(notePath, 'utf-8')).toBe('Slack integration note');
+    });
+
+    it('should overwrite existing integration note', async () => {
+      await storage.saveIntegrationNote('malcolm', 'intend', 'Original note');
+      await storage.saveIntegrationNote('malcolm', 'intend', 'Updated note');
+
+      const retrieved = await storage.getIntegrationNote('malcolm', 'intend');
+      expect(retrieved).toBe('Updated note');
+    });
+
+    it('should validate username for integration notes', async () => {
+      await expect(storage.saveIntegrationNote('../evil', 'intend', 'note'))
+        .rejects.toThrow('Invalid username');
+      await expect(storage.getIntegrationNote('../evil', 'intend'))
+        .rejects.toThrow('Invalid username');
+    });
+
+    it('should keep notes separate between users', async () => {
+      await storage.saveIntegrationNote('user1', 'intend', 'User 1 note');
+      await storage.saveIntegrationNote('user2', 'intend', 'User 2 note');
+
+      expect(await storage.getIntegrationNote('user1', 'intend')).toBe('User 1 note');
+      expect(await storage.getIntegrationNote('user2', 'intend')).toBe('User 2 note');
+    });
+  });
+
+  describe('Destination Notes', () => {
+    it('should save and retrieve a destination note', async () => {
+      const noteContent = 'This is my note about the dump destination';
+      await storage.saveDestinationNote('malcolm', 'dump-route', noteContent);
+
+      const retrieved = await storage.getDestinationNote('malcolm', 'dump-route');
+      expect(retrieved).toBe(noteContent);
+    });
+
+    it('should return null for non-existent destination note', async () => {
+      const note = await storage.getDestinationNote('malcolm', 'nonexistent');
+      expect(note).toBeNull();
+    });
+
+    it('should store destination notes in correct path', async () => {
+      await storage.saveDestinationNote('testuser', 'notes-route', 'Notes route description');
+
+      const notePath = path.join(TEST_DATA_DIR, 'users', 'testuser', 'notes', 'destinations', 'notes-route.txt');
+      expect(fs.existsSync(notePath)).toBe(true);
+      expect(fs.readFileSync(notePath, 'utf-8')).toBe('Notes route description');
+    });
+
+    it('should sanitize destination IDs with slashes', async () => {
+      await storage.saveDestinationNote('malcolm', 'project/tasks/inbox', 'Nested destination');
+
+      // The slash should be replaced with underscore
+      const notePath = path.join(TEST_DATA_DIR, 'users', 'malcolm', 'notes', 'destinations', 'project_tasks_inbox.txt');
+      expect(fs.existsSync(notePath)).toBe(true);
+
+      // Should retrieve using original ID
+      const retrieved = await storage.getDestinationNote('malcolm', 'project/tasks/inbox');
+      expect(retrieved).toBe('Nested destination');
+    });
+
+    it('should sanitize destination IDs with backslashes', async () => {
+      await storage.saveDestinationNote('malcolm', 'folder\\subfolder', 'Backslash destination');
+
+      const notePath = path.join(TEST_DATA_DIR, 'users', 'malcolm', 'notes', 'destinations', 'folder_subfolder.txt');
+      expect(fs.existsSync(notePath)).toBe(true);
+
+      const retrieved = await storage.getDestinationNote('malcolm', 'folder\\subfolder');
+      expect(retrieved).toBe('Backslash destination');
+    });
+
+    it('should sanitize destination IDs with colons', async () => {
+      await storage.saveDestinationNote('malcolm', 'intend:project:123', 'Colon destination');
+
+      const notePath = path.join(TEST_DATA_DIR, 'users', 'malcolm', 'notes', 'destinations', 'intend_project_123.txt');
+      expect(fs.existsSync(notePath)).toBe(true);
+
+      const retrieved = await storage.getDestinationNote('malcolm', 'intend:project:123');
+      expect(retrieved).toBe('Colon destination');
+    });
+
+    it('should validate username for destination notes', async () => {
+      await expect(storage.saveDestinationNote('../evil', 'route', 'note'))
+        .rejects.toThrow('Invalid username');
+      await expect(storage.getDestinationNote('../evil', 'route'))
+        .rejects.toThrow('Invalid username');
+    });
+
+    it('should keep notes separate between users', async () => {
+      await storage.saveDestinationNote('user1', 'route', 'User 1 note');
+      await storage.saveDestinationNote('user2', 'route', 'User 2 note');
+
+      expect(await storage.getDestinationNote('user1', 'route')).toBe('User 1 note');
+      expect(await storage.getDestinationNote('user2', 'route')).toBe('User 2 note');
+    });
+
+    it('should handle empty destination ID gracefully', async () => {
+      // Empty ID should still work with sanitization
+      await storage.saveDestinationNote('malcolm', '', 'Empty ID note');
+      const retrieved = await storage.getDestinationNote('malcolm', '');
+      expect(retrieved).toBe('Empty ID note');
+    });
+  });
+
+  describe('sanitizeId helper', () => {
+    it('should handle various unsafe characters', async () => {
+      // Test multiple unsafe characters in one ID
+      await storage.saveDestinationNote('malcolm', 'a/b\\c:d*e?f"g<h>i|j', 'Complex ID');
+
+      const notePath = path.join(TEST_DATA_DIR, 'users', 'malcolm', 'notes', 'destinations', 'a_b_c_d_e_f_g_h_i_j.txt');
+      expect(fs.existsSync(notePath)).toBe(true);
+
+      const retrieved = await storage.getDestinationNote('malcolm', 'a/b\\c:d*e?f"g<h>i|j');
+      expect(retrieved).toBe('Complex ID');
+    });
+  });
 });

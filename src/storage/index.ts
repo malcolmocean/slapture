@@ -302,6 +302,61 @@ export class Storage {
     );
   }
 
+  // Sanitize an ID to be filesystem-safe
+  private sanitizeId(id: string): string {
+    // Replace characters that are unsafe for filenames: / \ : * ? " < > |
+    return id.replace(/[/\\:*?"<>|]/g, '_');
+  }
+
+  // Integration Notes
+  private getIntegrationNotePath(username: string, integrationId: string): string {
+    const notesDir = path.join(this.ensureUserDir(username), 'notes', 'integrations');
+    if (!fs.existsSync(notesDir)) {
+      fs.mkdirSync(notesDir, { recursive: true });
+    }
+    return path.join(notesDir, `${integrationId}.txt`);
+  }
+
+  async getIntegrationNote(username: string, integrationId: string): Promise<string | null> {
+    this.validateUsername(username);
+    const notePath = this.getIntegrationNotePath(username, integrationId);
+    if (!fs.existsSync(notePath)) {
+      return null;
+    }
+    return fs.readFileSync(notePath, 'utf-8');
+  }
+
+  async saveIntegrationNote(username: string, integrationId: string, content: string): Promise<void> {
+    this.validateUsername(username);
+    const notePath = this.getIntegrationNotePath(username, integrationId);
+    fs.writeFileSync(notePath, content);
+  }
+
+  // Destination Notes
+  private getDestinationNotePath(username: string, destinationId: string): string {
+    const notesDir = path.join(this.ensureUserDir(username), 'notes', 'destinations');
+    if (!fs.existsSync(notesDir)) {
+      fs.mkdirSync(notesDir, { recursive: true });
+    }
+    const safeId = this.sanitizeId(destinationId);
+    return path.join(notesDir, `${safeId}.txt`);
+  }
+
+  async getDestinationNote(username: string, destinationId: string): Promise<string | null> {
+    this.validateUsername(username);
+    const notePath = this.getDestinationNotePath(username, destinationId);
+    if (!fs.existsSync(notePath)) {
+      return null;
+    }
+    return fs.readFileSync(notePath, 'utf-8');
+  }
+
+  async saveDestinationNote(username: string, destinationId: string, content: string): Promise<void> {
+    this.validateUsername(username);
+    const notePath = this.getDestinationNotePath(username, destinationId);
+    fs.writeFileSync(notePath, content);
+  }
+
   // Migration: move global tokens to per-user format
   async migrateGlobalTokensIfNeeded(): Promise<void> {
     const globalConfigPath = path.join(this.dataDir, 'config.json');
