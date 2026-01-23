@@ -157,14 +157,14 @@ describe('Storage', () => {
         baseUrl: 'https://intend.do'
       };
 
-      await storage.saveIntendTokens(tokens);
-      const retrieved = await storage.getIntendTokens();
+      await storage.saveIntendTokens('default', tokens);
+      const retrieved = await storage.getIntendTokens('default');
 
       expect(retrieved).toEqual(tokens);
     });
 
     it('should return null when no intend tokens exist', async () => {
-      const tokens = await storage.getIntendTokens();
+      const tokens = await storage.getIntendTokens('default');
       expect(tokens).toBeNull();
     });
 
@@ -176,9 +176,9 @@ describe('Storage', () => {
         baseUrl: 'https://intend.do'
       };
 
-      await storage.saveIntendTokens(tokens);
-      await storage.clearIntendTokens();
-      const retrieved = await storage.getIntendTokens();
+      await storage.saveIntendTokens('default', tokens);
+      await storage.clearIntendTokens('default');
+      const retrieved = await storage.getIntendTokens('default');
 
       expect(retrieved).toBeNull();
     });
@@ -253,6 +253,62 @@ describe('Storage', () => {
       const blocked = await storage.listCapturesNeedingAuth();
 
       expect(blocked.length).toBe(0);
+    });
+  });
+
+  describe('Per-user token storage', () => {
+    it('should save and retrieve tokens for specific user', async () => {
+      const tokens: IntendTokens = {
+        accessToken: 'token-for-malcolm',
+        refreshToken: 'refresh',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      };
+
+      await storage.saveIntendTokens('malcolm', tokens);
+      const retrieved = await storage.getIntendTokens('malcolm');
+      expect(retrieved?.accessToken).toBe('token-for-malcolm');
+
+      // Different user should have no tokens
+      const otherUser = await storage.getIntendTokens('default');
+      expect(otherUser).toBeNull();
+    });
+
+    it('should store tokens in users directory', async () => {
+      const tokens: IntendTokens = {
+        accessToken: 'test',
+        refreshToken: 'refresh',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      };
+
+      await storage.saveIntendTokens('testuser', tokens);
+
+      const userConfigPath = path.join(TEST_DATA_DIR, 'users', 'testuser', 'config.json');
+      expect(fs.existsSync(userConfigPath)).toBe(true);
+
+      const config = JSON.parse(fs.readFileSync(userConfigPath, 'utf-8'));
+      expect(config.integrations.intend.accessToken).toBe('test');
+    });
+
+    it('should clear tokens for specific user only', async () => {
+      await storage.saveIntendTokens('user1', {
+        accessToken: 'token1',
+        refreshToken: 'r1',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      });
+      await storage.saveIntendTokens('user2', {
+        accessToken: 'token2',
+        refreshToken: 'r2',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      });
+
+      await storage.clearIntendTokens('user1');
+
+      expect(await storage.getIntendTokens('user1')).toBeNull();
+      expect((await storage.getIntendTokens('user2'))?.accessToken).toBe('token2');
     });
   });
 });

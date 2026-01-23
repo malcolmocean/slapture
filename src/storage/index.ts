@@ -237,24 +237,51 @@ export class Storage {
     }
   }
 
-  // Integration Token Storage (intend.do OAuth)
-  async saveIntendTokens(tokens: IntendTokens): Promise<void> {
-    const config = await this.getConfig();
-    config.integrations = config.integrations || {};
-    config.integrations.intend = tokens;
-    await this.saveConfig(config);
+  // Per-user config management
+  private ensureUserDir(username: string): string {
+    const userDir = path.join(this.dataDir, 'users', username);
+    if (!fs.existsSync(userDir)) {
+      fs.mkdirSync(userDir, { recursive: true });
+    }
+    return userDir;
   }
 
-  async getIntendTokens(): Promise<IntendTokens | null> {
-    const config = await this.getConfig();
+  private getUserConfigPath(username: string): string {
+    return path.join(this.ensureUserDir(username), 'config.json');
+  }
+
+  private async getUserConfig(username: string): Promise<{ integrations?: { intend?: IntendTokens } }> {
+    const configPath = this.getUserConfigPath(username);
+    if (!fs.existsSync(configPath)) {
+      return {};
+    }
+    const content = fs.readFileSync(configPath, 'utf-8');
+    return JSON.parse(content);
+  }
+
+  private async saveUserConfig(username: string, config: { integrations?: { intend?: IntendTokens } }): Promise<void> {
+    const configPath = this.getUserConfigPath(username);
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  }
+
+  // Integration Token Storage (intend.do OAuth) - now per-user
+  async saveIntendTokens(username: string, tokens: IntendTokens): Promise<void> {
+    const config = await this.getUserConfig(username);
+    config.integrations = config.integrations || {};
+    config.integrations.intend = tokens;
+    await this.saveUserConfig(username, config);
+  }
+
+  async getIntendTokens(username: string): Promise<IntendTokens | null> {
+    const config = await this.getUserConfig(username);
     return config.integrations?.intend || null;
   }
 
-  async clearIntendTokens(): Promise<void> {
-    const config = await this.getConfig();
+  async clearIntendTokens(username: string): Promise<void> {
+    const config = await this.getUserConfig(username);
     if (config.integrations) {
       delete config.integrations.intend;
-      await this.saveConfig(config);
+      await this.saveUserConfig(username, config);
     }
   }
 
