@@ -10,12 +10,12 @@ test.describe('intend.do OAuth Integration', () => {
 
   test.beforeEach(async ({ request }) => {
     // Clear any existing intend tokens
-    await request.post('http://localhost:3333/disconnect/intend?token=dev-token');
+    await request.post('http://localhost:3333/disconnect/intend?user=default&token=dev-token');
   });
 
   test('complete OAuth flow and route capture', async ({ page, request }) => {
     // 1. Start OAuth flow
-    await page.goto('http://localhost:3333/connect/intend');
+    await page.goto('http://localhost:3333/connect/intend?user=default');
 
     // 2. Should redirect to intend.do login
     await expect(page).toHaveURL(/intend\.do/);
@@ -33,7 +33,7 @@ test.describe('intend.do OAuth Integration', () => {
     await expect(page.locator('body')).toContainText('Connected');
 
     // 6. Verify auth status shows connected
-    const statusResponse = await request.get('http://localhost:3333/auth/status/intend?token=dev-token');
+    const statusResponse = await request.get('http://localhost:3333/auth/status/intend?user=default&token=dev-token');
     const status = await statusResponse.json();
     expect(status.connected).toBe(true);
 
@@ -56,7 +56,7 @@ test.describe('intend.do OAuth Integration', () => {
     // 1. Clear tokens (done in beforeEach)
 
     // 2. Verify not connected
-    const statusResponse = await request.get('http://localhost:3333/auth/status/intend?token=dev-token');
+    const statusResponse = await request.get('http://localhost:3333/auth/status/intend?user=default&token=dev-token');
     const status = await statusResponse.json();
     expect(status.connected).toBe(false);
 
@@ -88,7 +88,7 @@ test.describe('intend.do OAuth Integration', () => {
     expect(capture.executionResult).toBe('blocked_needs_auth');
 
     // 2. Complete OAuth flow
-    await page.goto('http://localhost:3333/connect/intend');
+    await page.goto('http://localhost:3333/connect/intend?user=default');
     await expect(page).toHaveURL(/intend\.do/);
     await page.getByRole('textbox', { name: 'username' }).fill(TEST_USERNAME);
     await page.getByRole('textbox', { name: 'password' }).fill(TEST_PASSWORD);
