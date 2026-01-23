@@ -13,6 +13,14 @@
   - and DON'T RUN THIS: cat > /tmp/test-prompt.ts << 'EOF'  [file contents]
     - also 
 
+## Specs and Context
+
+For detailed requirements and rationale, see:
+- `SPEC_INITIAL.md` - Phase 1 (core routing, completed)
+- `SPEC_LATER.md` - Phases 2-6 (integrations, dashboard, LLM validation, mastermind)
+
+Check these when implementing features from beads issues.
+
 about this particular system:
 - never ever make built-in hardcoded/default routes/matchers!
   - the whole system is based around intelligent matching
