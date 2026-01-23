@@ -60,6 +60,36 @@ async function getOrRegisterClient(config: OAuthConfig): Promise<DynamicClientCr
   return clientData;
 }
 
+// Helper to generate CSRF token
+function generateCsrf(): string {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
+// Helper to encode state parameter with user and CSRF token
+function encodeState(user: string, csrf: string): string {
+  return Buffer.from(JSON.stringify({ user, csrf })).toString('base64');
+}
+
+// Helper to decode state parameter
+// Returns { user, csrf, error } where error is set if decoding fails
+interface DecodeStateResult {
+  user?: string;
+  csrf?: string;
+  error?: 'invalid_state' | 'missing_user';
+}
+
+function decodeState(state: string): DecodeStateResult {
+  try {
+    const decoded = JSON.parse(Buffer.from(state, 'base64').toString());
+    if (typeof decoded.user !== 'string' || !decoded.user) {
+      return { error: 'missing_user' };
+    }
+    return { user: decoded.user, csrf: decoded.csrf };
+  } catch {
+    return { error: 'invalid_state' };
+  }
+}
+
 export function buildOAuthRoutes(
   app: FastifyInstance,
   storage: Storage,
@@ -68,6 +98,12 @@ export function buildOAuthRoutes(
 
   // Initiate OAuth flow
   app.get('/connect/intend', async (request, reply) => {
+    const { user } = request.query as { user?: string };
+
+    if (!user) {
+      return reply.status(400).send({ error: 'Missing required user parameter' });
+    }
+
     try {
       const credentials = await getOrRegisterClient(config);
       const redirectUri = `${config.callbackBaseUrl}/oauth/callback/intend`;
@@ -76,6 +112,11 @@ export function buildOAuthRoutes(
       authorizeUrl.searchParams.set('redirect_uri', redirectUri);
       authorizeUrl.searchParams.set('response_type', 'code');
       authorizeUrl.searchParams.set('scope', 'mcp:tools');
+
+      // Encode user in state parameter with CSRF token
+      const csrf = generateCsrf();
+      const state = encodeState(user, csrf);
+      authorizeUrl.searchParams.set('state', state);
 
       return reply.redirect(authorizeUrl.toString());
     } catch (error) {
@@ -86,11 +127,26 @@ export function buildOAuthRoutes(
 
   // OAuth callback
   app.get('/oauth/callback/intend', async (request, reply) => {
-    const { code } = request.query as { code?: string };
+    const { code, state } = request.query as { code?: string; state?: string };
 
     if (!code) {
       return reply.status(400).send({ error: 'Missing authorization code' });
     }
+
+    if (!state) {
+      return reply.status(400).send({ error: 'Missing state parameter' });
+    }
+
+    // Decode state to get user
+    const decodedState = decodeState(state);
+    if (decodedState.error === 'invalid_state') {
+      return reply.status(400).send({ error: 'Invalid state parameter' });
+    }
+    if (decodedState.error === 'missing_user' || !decodedState.user) {
+      return reply.status(400).send({ error: 'Missing user in state parameter' });
+    }
+
+    const { user } = decodedState;
 
     try {
       const credentials = await getOrRegisterClient(config);
@@ -124,14 +180,15 @@ export function buildOAuthRoutes(
       // Calculate expiry
       const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
-      await storage.saveIntendTokens({
+      // Save tokens for the specific user
+      await storage.saveIntendTokens(user, {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         expiresAt,
         baseUrl: config.intendBaseUrl
       });
 
-      console.log('[OAuth] intend.do connected successfully');
+      console.log(`[OAuth] intend.do connected successfully for user: ${user}`);
       return reply.redirect('/oauth/success?integration=intend');
     } catch (error) {
       console.error('[OAuth] Error during token exchange:', error);
@@ -141,7 +198,13 @@ export function buildOAuthRoutes(
 
   // Check auth status
   app.get('/auth/status/intend', async (request, reply) => {
-    const tokens = await storage.getIntendTokens();
+    const { user } = request.query as { user?: string };
+
+    if (!user) {
+      return reply.status(400).send({ error: 'Missing required user parameter' });
+    }
+
+    const tokens = await storage.getIntendTokens(user);
     const connected = tokens !== null;
     const expired = connected && new Date(tokens.expiresAt) < new Date();
     const blockedCaptures = await storage.listCapturesNeedingAuth();
@@ -157,8 +220,14 @@ export function buildOAuthRoutes(
 
   // Disconnect
   app.post('/disconnect/intend', async (request, reply) => {
-    await storage.clearIntendTokens();
-    console.log('[OAuth] intend.do disconnected');
+    const { user } = request.query as { user?: string };
+
+    if (!user) {
+      return reply.status(400).send({ error: 'Missing required user parameter' });
+    }
+
+    await storage.clearIntendTokens(user);
+    console.log(`[OAuth] intend.do disconnected for user: ${user}`);
     return { success: true };
   });
 

@@ -16,8 +16,8 @@ export class IntendExecutor {
   }
 
   async execute(route: Route, capture: Capture): Promise<IntendExecutionResult> {
-    // Get tokens
-    const tokens = await this.storage.getIntendTokens();
+    // Get tokens for the capture's user
+    const tokens = await this.storage.getIntendTokens(capture.username);
 
     if (!tokens) {
       return {
