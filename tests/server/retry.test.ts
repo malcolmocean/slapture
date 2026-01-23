@@ -46,6 +46,7 @@ describe('Retry Blocked Captures', () => {
       id: 'blocked-capture-1',
       raw: 'intend: buy groceries',
       timestamp: new Date().toISOString(),
+      username: 'default',
       parsed: { explicitRoute: 'intend', payload: 'buy groceries', metadata: {} },
       routeProposed: 'route-intend',
       routeConfidence: 'high',
@@ -67,8 +68,8 @@ describe('Retry Blocked Captures', () => {
   });
 
   it('should retry blocked capture after OAuth configured', async () => {
-    // Configure OAuth
-    await storage.saveIntendTokens({
+    // Configure OAuth for 'default' user (matches the capture's username)
+    await storage.saveIntendTokens('default', {
       accessToken: 'valid-token',
       refreshToken: 'refresh',
       expiresAt: '2030-01-01T00:00:00Z',
@@ -117,6 +118,7 @@ describe('Retry Blocked Captures', () => {
       id: 'success-capture',
       raw: 'test',
       timestamp: new Date().toISOString(),
+      username: 'default',
       parsed: { explicitRoute: null, payload: 'test', metadata: {} },
       routeProposed: null,
       routeConfidence: null,

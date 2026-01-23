@@ -59,8 +59,8 @@ describe('Pipeline Intend Integration', () => {
   });
 
   it('should succeed when intend OAuth configured and API works', async () => {
-    // Configure OAuth
-    await storage.saveIntendTokens({
+    // Configure OAuth for 'default' user (the username used by pipeline.process)
+    await storage.saveIntendTokens('default', {
       accessToken: 'valid-token',
       refreshToken: 'refresh',
       expiresAt: '2030-01-01T00:00:00Z',
@@ -86,7 +86,7 @@ describe('Pipeline Intend Integration', () => {
   });
 
   it('should block capture when token expired', async () => {
-    await storage.saveIntendTokens({
+    await storage.saveIntendTokens('default', {
       accessToken: 'expired-token',
       refreshToken: 'refresh',
       expiresAt: '2020-01-01T00:00:00Z',

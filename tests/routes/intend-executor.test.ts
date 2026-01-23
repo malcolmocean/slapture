@@ -1,5 +1,6 @@
 // tests/routes/intend-executor.test.ts
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
 import { IntendExecutor } from '../../src/routes/intend-executor';
 import { Storage } from '../../src/storage';
 import type { Route, Capture } from '../../src/types';
@@ -140,5 +141,71 @@ describe('IntendExecutor', () => {
 
     expect(result.status).toBe('failed');
     expect(result.error).toContain('500');
+  });
+});
+
+describe('IntendExecutor per-user tokens', () => {
+  let storage: Storage;
+  let executor: IntendExecutor;
+  const testDir = './test-data-intend-executor';
+
+  beforeEach(() => {
+    fs.mkdirSync(testDir, { recursive: true });
+    storage = new Storage(testDir);
+    executor = new IntendExecutor(storage);
+  });
+
+  afterEach(() => {
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  const createCapture = (username: string): Capture => ({
+    id: 'test-id',
+    raw: 'intend: test intention',
+    timestamp: new Date().toISOString(),
+    username,
+    parsed: { explicitRoute: null, payload: 'test intention', metadata: {} },
+    routeProposed: null,
+    routeConfidence: null,
+    routeFinal: 'route-1',
+    executionTrace: [],
+    executionResult: 'pending',
+    verificationState: 'pending',
+    retiredFromTests: false,
+    retiredReason: null,
+  });
+
+  const intendRoute: Route = {
+    id: 'route-1',
+    name: 'intend',
+    description: 'Send to intend.do',
+    triggers: [],
+    destinationType: 'intend',
+    destinationConfig: { baseUrl: 'https://intend.do' },
+    transformScript: null,
+    createdAt: new Date().toISOString(),
+    lastUsed: null,
+    recentItems: [],
+  };
+
+  it('should use tokens from capture username', async () => {
+    // Setup tokens for malcolm only
+    await storage.saveIntendTokens('malcolm', {
+      accessToken: 'malcolm-token',
+      refreshToken: 'refresh',
+      expiresAt: '2030-01-01T00:00:00Z',
+      baseUrl: 'https://intend.do'
+    });
+
+    // Capture for malcolm should find tokens
+    const malcolmCapture = createCapture('malcolm');
+    const result1 = await executor.execute(intendRoute, malcolmCapture);
+    // Won't be blocked_needs_auth since tokens exist
+    expect(result1.status).not.toBe('blocked_needs_auth');
+
+    // Capture for default should be blocked
+    const defaultCapture = createCapture('default');
+    const result2 = await executor.execute(intendRoute, defaultCapture);
+    expect(result2.status).toBe('blocked_needs_auth');
   });
 });
