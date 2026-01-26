@@ -3,6 +3,7 @@ import Fastify, { FastifyInstance } from 'fastify';
 import { Storage } from '../storage/index.js';
 import { CapturePipeline } from '../pipeline/index.js';
 import { buildOAuthRoutes } from './oauth.js';
+import { buildDashboardRoutes } from '../dashboard/routes.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -160,6 +161,9 @@ export async function buildServer(
     intendBaseUrl: process.env.INTEND_BASE_URL || 'https://intend.do',
     callbackBaseUrl: process.env.CALLBACK_BASE_URL || 'http://localhost:3333'
   });
+
+  // Add dashboard routes
+  buildDashboardRoutes(server, storage);
 
   return server;
 }
