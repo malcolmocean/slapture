@@ -148,4 +148,105 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
 
     reply.type('text/html').send(layout('Captures', content, token));
   });
+
+  // Capture detail
+  server.get<{
+    Params: { captureId: string };
+    Querystring: { token: string };
+  }>('/dashboard/captures/:captureId', async (request, reply) => {
+    const { captureId } = request.params;
+    const { token } = request.query;
+
+    const capture = await storage.getCapture(captureId);
+    if (!capture) {
+      return reply.code(404).type('text/html').send(layout('Not Found', '<h1>Capture not found</h1>', token));
+    }
+
+    const content = `
+      <h1>Capture Detail</h1>
+
+      <div class="card">
+        <h3>Input</h3>
+        <pre style="background: #f5f5f5; padding: 1rem; border-radius: 4px; overflow-x: auto;">${escapeHtml(capture.raw)}</pre>
+      </div>
+
+      <div class="card">
+        <h3>Status</h3>
+        <table>
+          <tr><td><strong>ID</strong></td><td><code>${capture.id}</code></td></tr>
+          <tr><td><strong>Time</strong></td><td>${formatDate(capture.timestamp)}</td></tr>
+          <tr><td><strong>Status</strong></td><td>${statusBadge(capture.executionResult)}</td></tr>
+          <tr><td><strong>Verification</strong></td><td>${verificationBadge(capture.verificationState)}</td></tr>
+          <tr><td><strong>Route</strong></td><td>${capture.routeFinal ? `<a href="/dashboard/routes/${capture.routeFinal}?token=${token}">${capture.routeFinal}</a>` : '-'}</td></tr>
+          <tr><td><strong>Confidence</strong></td><td>${capture.routeConfidence || '-'}</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Actions</h3>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+          ${capture.verificationState !== 'human_verified' ? `
+            <form method="post" action="/dashboard/captures/${captureId}/verify?token=${token}" style="margin: 0;">
+              <button type="submit" class="btn btn-primary">Verify Correct</button>
+            </form>
+          ` : '<span class="badge badge-success">Already Verified</span>'}
+
+          ${['blocked_needs_auth', 'blocked_auth_expired'].includes(capture.executionResult) ? `
+            <form method="post" action="/retry/${captureId}?token=${token}" style="margin: 0;">
+              <button type="submit" class="btn btn-secondary">Retry</button>
+            </form>
+          ` : ''}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Execution Trace</h3>
+        ${capture.executionTrace.length === 0 ? '<p class="text-muted">No trace recorded</p>' : `
+          <table>
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>Duration</th>
+                <th>Output</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${capture.executionTrace.map(step => `
+                <tr>
+                  <td><strong>${step.step}</strong></td>
+                  <td>${step.durationMs}ms</td>
+                  <td><pre style="margin: 0; font-size: 0.75rem; max-width: 400px; overflow-x: auto;">${escapeHtml(JSON.stringify(step.output, null, 2).slice(0, 500))}</pre></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+
+      <p style="margin-top: 1rem;">
+        <a href="/dashboard/captures?token=${token}">← Back to captures</a>
+      </p>
+    `;
+
+    reply.type('text/html').send(layout('Capture Detail', content, token));
+  });
+
+  // Verify capture
+  server.post<{
+    Params: { captureId: string };
+    Querystring: { token: string };
+  }>('/dashboard/captures/:captureId/verify', async (request, reply) => {
+    const { captureId } = request.params;
+    const { token } = request.query;
+
+    const capture = await storage.getCapture(captureId);
+    if (!capture) {
+      return reply.code(404).send({ error: 'Capture not found' });
+    }
+
+    capture.verificationState = 'human_verified';
+    await storage.updateCapture(capture);
+
+    reply.redirect(`/dashboard/captures/${captureId}?token=${token}`);
+  });
 }

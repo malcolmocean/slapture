@@ -37,3 +37,35 @@ test.describe('Capture List', () => {
     await expect(select).toHaveValue('success');
   });
 });
+
+test.describe('Capture Detail', () => {
+  test('shows capture detail with execution trace', async ({ page, request }) => {
+    // First create a capture
+    const res = await request.post(`/capture?token=${TOKEN}`, {
+      data: { text: 'dump: test detail view' },
+    });
+    const { captureId } = await res.json();
+
+    await page.goto(`/dashboard/captures/${captureId}?token=${TOKEN}`);
+
+    await expect(page.locator('h1')).toContainText('Capture Detail');
+    await expect(page.locator('text=dump: test detail view')).toBeVisible();
+    await expect(page.locator('text=Execution Trace')).toBeVisible();
+  });
+
+  test('can verify a capture as correct', async ({ page, request }) => {
+    const res = await request.post(`/capture?token=${TOKEN}`, {
+      data: { text: 'dump: verify me' },
+    });
+    const { captureId } = await res.json();
+
+    await page.goto(`/dashboard/captures/${captureId}?token=${TOKEN}`);
+    await page.click('button:has-text("Verify Correct")');
+
+    // Wait for page to reload after redirect
+    await page.waitForURL(`**/dashboard/captures/${captureId}**`);
+
+    // Should show verified badge (both in status table and "Already Verified" in actions)
+    await expect(page.locator('.badge-success').first()).toBeVisible();
+  });
+});

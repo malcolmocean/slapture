@@ -1,5 +1,6 @@
 // src/server/index.ts
 import Fastify, { FastifyInstance } from 'fastify';
+import formbody from '@fastify/formbody';
 import { Storage } from '../storage/index.js';
 import { CapturePipeline } from '../pipeline/index.js';
 import { buildOAuthRoutes } from './oauth.js';
@@ -17,6 +18,9 @@ export async function buildServer(
       level: 'warn',
     },
   });
+
+  // Register form body parser for dashboard forms
+  await server.register(formbody);
 
   const pipeline = new CapturePipeline(storage, filestoreRoot, apiKey);
 

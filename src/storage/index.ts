@@ -75,6 +75,34 @@ export class Storage {
     return null;
   }
 
+  async updateCapture(capture: Capture): Promise<void> {
+    // Find the file and update it
+    const capturesDir = path.join(this.dataDir, 'captures');
+
+    // Check legacy format
+    const legacyPath = path.join(capturesDir, `${capture.id}.json`);
+    if (fs.existsSync(legacyPath)) {
+      fs.writeFileSync(legacyPath, JSON.stringify(capture, null, 2));
+      return;
+    }
+
+    // Search in user subdirectories
+    const entries = fs.readdirSync(capturesDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const userDir = path.join(capturesDir, entry.name);
+        const files = fs.readdirSync(userDir).filter(f => f.endsWith(`_${capture.id}.json`));
+        if (files.length > 0) {
+          fs.writeFileSync(path.join(userDir, files[0]), JSON.stringify(capture, null, 2));
+          return;
+        }
+      }
+    }
+
+    // If not found, save as new (use username from capture)
+    await this.saveCapture(capture, capture.username || 'default');
+  }
+
   async listCaptures(limit: number = 50, username?: string): Promise<Capture[]> {
     const captures = await this.listAllCaptures(username);
     return captures
