@@ -24,7 +24,7 @@ describe('OAuth Endpoints', () => {
       intendClientId: 'test-client-id',
       intendClientSecret: 'test-client-secret',
       intendBaseUrl: 'https://intend.do',
-      callbackBaseUrl: 'http://localhost:3333'
+      callbackBaseUrl: 'http://localhost:4444'
     });
     await app.ready();
   });

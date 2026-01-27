@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-const PORT = process.env.TEST_PORT || '3334';
+const PORT = process.env.TEST_PORT || '4445';
 
 export default defineConfig({
   testDir: './tests/e2e',

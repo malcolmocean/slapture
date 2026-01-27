@@ -163,7 +163,7 @@ export async function buildServer(
     intendClientId: process.env.INTEND_CLIENT_ID || '',
     intendClientSecret: process.env.INTEND_CLIENT_SECRET || '',
     intendBaseUrl: process.env.INTEND_BASE_URL || 'https://intend.do',
-    callbackBaseUrl: process.env.CALLBACK_BASE_URL || 'http://localhost:3333'
+    callbackBaseUrl: process.env.CALLBACK_BASE_URL || 'http://localhost:4444'
   });
 
   // Add dashboard routes
