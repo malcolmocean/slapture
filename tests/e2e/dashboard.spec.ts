@@ -128,3 +128,22 @@ test.describe('Correction Flow', () => {
     await expect(page.locator('text=Select correct route')).toBeVisible();
   });
 });
+
+test.describe('Test Suite View', () => {
+  test('shows verified captures as golden tests', async ({ page, request }) => {
+    // Create and verify a capture
+    const res = await request.post(`/capture?token=${TOKEN}`, {
+      data: { text: 'dump: test suite item' },
+    });
+    const { captureId } = await res.json();
+
+    // Verify it
+    await request.post(`/dashboard/captures/${captureId}/verify?token=${TOKEN}`);
+
+    // Check test suite
+    await page.goto(`/dashboard/test-suite?token=${TOKEN}`);
+
+    await expect(page.locator('h1')).toContainText('Test Suite');
+    await expect(page.getByRole('cell', { name: 'dump: test suite item' }).first()).toBeVisible();
+  });
+});

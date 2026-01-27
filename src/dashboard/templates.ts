@@ -97,6 +97,7 @@ export function layout(title: string, content: string, token: string): string {
     <a href="/dashboard/captures?token=${token}">Captures</a>
     <a href="/dashboard/routes?token=${token}">Routes</a>
     <a href="/dashboard/auth?token=${token}">Auth Status</a>
+    <a href="/dashboard/test-suite?token=${token}">Test Suite</a>
   </nav>
   <main>
     ${content}

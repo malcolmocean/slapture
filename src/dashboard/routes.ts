@@ -611,4 +611,89 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
 
     reply.redirect(`/dashboard/captures/${captureId}?token=${token}`);
   });
+
+  // Test suite view
+  server.get<{ Querystring: { token: string } }>('/dashboard/test-suite', async (request, reply) => {
+    const { token } = request.query;
+
+    const allCaptures = await storage.listAllCaptures();
+
+    // Golden tests = human_verified captures that aren't retired
+    const goldenTests = allCaptures.filter(c =>
+      c.verificationState === 'human_verified' && !c.retiredFromTests
+    );
+
+    // Group by route
+    const byRoute = new Map<string, typeof goldenTests>();
+    for (const capture of goldenTests) {
+      const routeId = capture.routeFinal || 'unrouted';
+      if (!byRoute.has(routeId)) {
+        byRoute.set(routeId, []);
+      }
+      byRoute.get(routeId)!.push(capture);
+    }
+
+    const routes = await storage.listRoutes();
+    const routeNames = new Map(routes.map(r => [r.id, r.name]));
+
+    const content = `
+      <h1>Test Suite</h1>
+      <p class="text-muted" style="margin-bottom: 1rem;">
+        ${goldenTests.length} verified captures serve as regression tests for routing changes.
+      </p>
+
+      ${Array.from(byRoute.entries()).map(([routeId, captures]) => `
+        <div class="card">
+          <h3>${routeNames.get(routeId) || routeId} (${captures.length} tests)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Input</th>
+                <th>Time</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${captures.slice(0, 10).map(c => `
+                <tr>
+                  <td class="text-truncate">${escapeHtml(c.raw)}</td>
+                  <td class="text-muted">${formatDate(c.timestamp)}</td>
+                  <td>
+                    <a href="/dashboard/captures/${c.id}?token=${token}" class="btn btn-secondary">View</a>
+                    <form method="post" action="/dashboard/captures/${c.id}/retire?token=${token}" style="display: inline;">
+                      <button type="submit" class="btn btn-danger" onclick="return confirm('Retire this test case?')">Retire</button>
+                    </form>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `).join('')}
+
+      ${goldenTests.length === 0 ? '<div class="card"><p class="empty-state">No verified captures yet. Verify captures to add them to the test suite.</p></div>' : ''}
+    `;
+
+    reply.type('text/html').send(layout('Test Suite', content, token));
+  });
+
+  // Retire capture from test suite
+  server.post<{
+    Params: { captureId: string };
+    Querystring: { token: string };
+  }>('/dashboard/captures/:captureId/retire', async (request, reply) => {
+    const { captureId } = request.params;
+    const { token } = request.query;
+
+    const capture = await storage.getCapture(captureId);
+    if (!capture) {
+      return reply.code(404).send({ error: 'Capture not found' });
+    }
+
+    capture.retiredFromTests = true;
+    capture.retiredReason = 'Retired via dashboard';
+    await storage.updateCapture(capture);
+
+    reply.redirect(`/dashboard/test-suite?token=${token}`);
+  });
 }
