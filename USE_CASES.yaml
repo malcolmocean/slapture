@@ -15,7 +15,7 @@ definitely:
   - this is a fantastic test-case for whether the mastermind is able to really solve problems
     - like maybe I should even something like, have one AI write a really clear test for this (with a test/dummy bookantt I don't mind nuking)
     - and then have another AI that isn't allowed to modify that test iterate on the other prompts until it can test that
-    
+
 - weight
 - gwen memories
 - beeminder
@@ -25,3 +25,8 @@ definitely:
 
 maybe:
 - workouts?
+
+
+---
+
+jarred: if it's not sure, it'll ask
