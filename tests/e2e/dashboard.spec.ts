@@ -69,3 +69,62 @@ test.describe('Capture Detail', () => {
     await expect(page.locator('.badge-success').first()).toBeVisible();
   });
 });
+
+test.describe('Route Management', () => {
+  test('shows route list with stats', async ({ page }) => {
+    await page.goto(`/dashboard/routes?token=${TOKEN}`);
+
+    await expect(page.locator('h1')).toContainText('Routes');
+    await expect(page.locator('table')).toBeVisible();
+    // Should show at least the dump route
+    await expect(page.locator('text=dump')).toBeVisible();
+  });
+
+  test('shows route detail with triggers', async ({ page }) => {
+    // Get the dump route ID
+    const routes = await page.request.get(`/routes?token=${TOKEN}`);
+    const routeList = await routes.json();
+    const dumpRoute = routeList.find((r: { name: string }) => r.name === 'dump');
+
+    await page.goto(`/dashboard/routes/${dumpRoute.id}?token=${TOKEN}`);
+
+    await expect(page.locator('h1')).toContainText('dump');
+    await expect(page.getByRole('heading', { name: 'Triggers' })).toBeVisible();
+  });
+});
+
+test.describe('Auth Status', () => {
+  test('shows integration status list', async ({ page }) => {
+    await page.goto(`/dashboard/auth?token=${TOKEN}`);
+
+    await expect(page.locator('h1')).toContainText('Auth Status');
+    // Should show integrations
+    await expect(page.locator('text=intend.do')).toBeVisible();
+    await expect(page.locator('text=Local Files')).toBeVisible();
+  });
+
+  test('shows blocked captures count', async ({ page }) => {
+    await page.goto(`/dashboard/auth?token=${TOKEN}`);
+
+    // Should show blocked captures section
+    await expect(page.getByRole('heading', { name: 'Blocked Captures' })).toBeVisible();
+  });
+});
+
+test.describe('Correction Flow', () => {
+  test('can mark capture as wrong and select correct route', async ({ page, request }) => {
+    // Create a capture
+    const res = await request.post(`/capture?token=${TOKEN}`, {
+      data: { text: 'dump: correction test' },
+    });
+    const { captureId } = await res.json();
+
+    await page.goto(`/dashboard/captures/${captureId}?token=${TOKEN}`);
+
+    // Click "This was wrong"
+    await page.click('a:has-text("This was wrong")');
+
+    // Should show correction form
+    await expect(page.locator('text=Select correct route')).toBeVisible();
+  });
+});

@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { Storage } from '../storage/index.js';
 import { layout, escapeHtml, formatDate, statusBadge, verificationBadge } from './templates.js';
+import { getIntegrationsWithStatus } from '../integrations/registry.js';
 
 export function buildDashboardRoutes(server: FastifyInstance, storage: Storage): void {
   // Dashboard home
@@ -189,6 +190,7 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
             <form method="post" action="/dashboard/captures/${captureId}/verify?token=${token}" style="margin: 0;">
               <button type="submit" class="btn btn-primary">Verify Correct</button>
             </form>
+            <a href="/dashboard/captures/${captureId}/correct?token=${token}" class="btn btn-secondary">This was wrong</a>
           ` : '<span class="badge badge-success">Already Verified</span>'}
 
           ${['blocked_needs_auth', 'blocked_auth_expired'].includes(capture.executionResult) ? `
@@ -246,6 +248,366 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
 
     capture.verificationState = 'human_verified';
     await storage.updateCapture(capture);
+
+    reply.redirect(`/dashboard/captures/${captureId}?token=${token}`);
+  });
+
+  // Routes list
+  server.get<{ Querystring: { token: string } }>('/dashboard/routes', async (request, reply) => {
+    const { token } = request.query;
+    const routes = await storage.listRoutes();
+    const allCaptures = await storage.listAllCaptures();
+
+    // Calculate stats for each route
+    const routeStats = routes.map(route => {
+      const routeCaptures = allCaptures.filter(c => c.routeFinal === route.id);
+      const successCount = routeCaptures.filter(c => c.executionResult === 'success').length;
+      const totalCount = routeCaptures.length;
+      const successRate = totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 0;
+
+      return {
+        ...route,
+        totalCaptures: totalCount,
+        successRate,
+        lastUsed: route.lastUsed ? formatDate(route.lastUsed) : 'Never',
+      };
+    });
+
+    const content = `
+      <h1>Routes</h1>
+
+      <div class="card">
+        ${routes.length === 0 ? '<p class="empty-state">No routes configured</p>' : `
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Triggers</th>
+                <th>Total Captures</th>
+                <th>Success Rate</th>
+                <th>Last Used</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${routeStats.map(r => `
+                <tr>
+                  <td><strong>${escapeHtml(r.name)}</strong></td>
+                  <td><span class="badge badge-info">${r.destinationType}</span></td>
+                  <td>${r.triggers.length}</td>
+                  <td>${r.totalCaptures}</td>
+                  <td>${r.successRate}%</td>
+                  <td class="text-muted">${r.lastUsed}</td>
+                  <td>
+                    <a href="/dashboard/routes/${r.id}?token=${token}" class="btn btn-secondary">View</a>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+    `;
+
+    reply.type('text/html').send(layout('Routes', content, token));
+  });
+
+  // Route detail
+  server.get<{
+    Params: { routeId: string };
+    Querystring: { token: string };
+  }>('/dashboard/routes/:routeId', async (request, reply) => {
+    const { routeId } = request.params;
+    const { token } = request.query;
+
+    const route = await storage.getRoute(routeId);
+    if (!route) {
+      return reply.code(404).type('text/html').send(layout('Not Found', '<h1>Route not found</h1>', token));
+    }
+
+    const allCaptures = await storage.listAllCaptures();
+    const routeCaptures = allCaptures.filter(c => c.routeFinal === route.id);
+
+    const content = `
+      <h1>${escapeHtml(route.name)}</h1>
+
+      <div class="card">
+        <h3>Details</h3>
+        <table>
+          <tr><td><strong>ID</strong></td><td><code>${route.id}</code></td></tr>
+          <tr><td><strong>Description</strong></td><td>${escapeHtml(route.description)}</td></tr>
+          <tr><td><strong>Destination Type</strong></td><td><span class="badge badge-info">${route.destinationType}</span></td></tr>
+          <tr><td><strong>Created</strong></td><td>${formatDate(route.createdAt)}</td></tr>
+          <tr><td><strong>Created By</strong></td><td>${route.createdBy}</td></tr>
+          <tr><td><strong>Last Used</strong></td><td>${route.lastUsed ? formatDate(route.lastUsed) : 'Never'}</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Triggers</h3>
+        ${route.triggers.length === 0 ? '<p class="text-muted">No triggers configured</p>' : `
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Pattern</th>
+                <th>Priority</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${route.triggers.map(t => `
+                <tr>
+                  <td><span class="badge badge-secondary">${t.type}</span></td>
+                  <td><code>${escapeHtml(t.pattern)}</code></td>
+                  <td>${t.priority}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+
+      <div class="card">
+        <h3>Recent Captures (${routeCaptures.length} total)</h3>
+        ${routeCaptures.length === 0 ? '<p class="text-muted">No captures for this route</p>' : `
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Input</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${routeCaptures.slice(0, 10).map(c => `
+                <tr>
+                  <td>${formatDate(c.timestamp)}</td>
+                  <td class="text-truncate"><a href="/dashboard/captures/${c.id}?token=${token}">${escapeHtml(c.raw)}</a></td>
+                  <td>${statusBadge(c.executionResult)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+
+      ${route.versions && route.versions.length > 0 ? `
+        <div class="card">
+          <h3>Version History</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Version</th>
+                <th>Time</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${route.versions.map(v => `
+                <tr>
+                  <td>v${v.version}</td>
+                  <td>${formatDate(v.timestamp)}</td>
+                  <td>${escapeHtml(v.reason)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+
+      <p style="margin-top: 1rem;">
+        <a href="/dashboard/routes?token=${token}">← Back to routes</a>
+      </p>
+    `;
+
+    reply.type('text/html').send(layout(route.name, content, token));
+  });
+
+  // Auth status page
+  server.get<{ Querystring: { token: string } }>('/dashboard/auth', async (request, reply) => {
+    const { token } = request.query;
+
+    // Get integrations with status for default user
+    const integrations = await getIntegrationsWithStatus(storage, 'default');
+    const blocked = await storage.listCapturesNeedingAuth();
+
+    const statusBadgeMap: Record<string, string> = {
+      connected: 'badge-success',
+      expired: 'badge-danger',
+      'not-connected': 'badge-warning',
+    };
+
+    const content = `
+      <h1>Auth Status</h1>
+
+      <div class="card">
+        <h3>Integrations</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Integration</th>
+              <th>Purpose</th>
+              <th>Auth Type</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${integrations.map(i => `
+              <tr>
+                <td><strong>${escapeHtml(i.name)}</strong></td>
+                <td class="text-muted">${escapeHtml(i.purpose)}</td>
+                <td><span class="badge badge-secondary">${i.authType}</span></td>
+                <td><span class="badge ${statusBadgeMap[i.status]}">${i.status}</span></td>
+                <td>
+                  ${i.authType === 'oauth' ? `
+                    ${i.status === 'connected' ? `
+                      <form method="post" action="/disconnect/${i.id}?token=${token}&redirect=/dashboard/auth" style="display: inline;">
+                        <button type="submit" class="btn btn-danger">Disconnect</button>
+                      </form>
+                    ` : `
+                      <a href="/connect/${i.id}?token=${token}" class="btn btn-primary">Connect</a>
+                    `}
+                  ` : '<span class="text-muted">No auth needed</span>'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Blocked Captures</h3>
+        ${blocked.length === 0 ? '<p class="text-muted">No captures blocked on auth</p>' : `
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Input</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${blocked.map(c => `
+                <tr>
+                  <td>${formatDate(c.timestamp)}</td>
+                  <td class="text-truncate">${escapeHtml(c.raw)}</td>
+                  <td>${statusBadge(c.executionResult)}</td>
+                  <td>
+                    <a href="/dashboard/captures/${c.id}?token=${token}" class="btn btn-secondary">View</a>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+    `;
+
+    reply.type('text/html').send(layout('Auth Status', content, token));
+  });
+
+  // Correction page
+  server.get<{
+    Params: { captureId: string };
+    Querystring: { token: string };
+  }>('/dashboard/captures/:captureId/correct', async (request, reply) => {
+    const { captureId } = request.params;
+    const { token } = request.query;
+
+    const capture = await storage.getCapture(captureId);
+    if (!capture) {
+      return reply.code(404).type('text/html').send(layout('Not Found', '<h1>Capture not found</h1>', token));
+    }
+
+    const routes = await storage.listRoutes();
+
+    const content = `
+      <h1>Correct Capture</h1>
+
+      <div class="card">
+        <h3>Original Input</h3>
+        <pre style="background: #f5f5f5; padding: 1rem; border-radius: 4px;">${escapeHtml(capture.raw)}</pre>
+        <p class="text-muted">Currently routed to: <strong>${capture.routeFinal || 'none'}</strong></p>
+      </div>
+
+      <div class="card">
+        <h3>Select correct route</h3>
+        <form method="post" action="/dashboard/captures/${captureId}/correct?token=${token}">
+          <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;">
+            ${routes.map(r => `
+              <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
+                <input type="radio" name="correctRoute" value="${r.id}" ${r.id === capture.routeFinal ? 'disabled' : ''}>
+                <strong>${escapeHtml(r.name)}</strong>
+                <span class="text-muted">- ${escapeHtml(r.description)}</span>
+                ${r.id === capture.routeFinal ? '<span class="badge badge-warning">Current</span>' : ''}
+              </label>
+            `).join('')}
+          </div>
+
+          <div style="margin-bottom: 1rem;">
+            <label for="reason">Reason (optional):</label>
+            <input type="text" name="reason" id="reason" style="width: 100%; padding: 0.5rem; margin-top: 0.5rem;" placeholder="Why was this routing wrong?">
+          </div>
+
+          <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="btn btn-primary">Submit Correction</button>
+            <a href="/dashboard/captures/${captureId}?token=${token}" class="btn btn-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    `;
+
+    reply.type('text/html').send(layout('Correct Capture', content, token));
+  });
+
+  // Submit correction
+  server.post<{
+    Params: { captureId: string };
+    Querystring: { token: string };
+    Body: { correctRoute: string; reason?: string };
+  }>('/dashboard/captures/:captureId/correct', async (request, reply) => {
+    const { captureId } = request.params;
+    const { token } = request.query;
+    const { correctRoute, reason } = request.body;
+
+    const capture = await storage.getCapture(captureId);
+    if (!capture) {
+      return reply.code(404).send({ error: 'Capture not found' });
+    }
+
+    // Mark capture as corrected
+    capture.verificationState = 'human_verified';
+
+    // Add to execution trace
+    capture.executionTrace.push({
+      step: 'route_validate',
+      timestamp: new Date().toISOString(),
+      input: { originalRoute: capture.routeFinal, correctedTo: correctRoute },
+      output: { reason: reason || 'User correction' },
+      codeVersion: 'dashboard-correction',
+      durationMs: 0,
+    });
+
+    // Update the route to the correct one
+    const oldRoute = capture.routeFinal;
+    capture.routeFinal = correctRoute;
+
+    await storage.updateCapture(capture);
+
+    // Mark as negative example on old route (update recentItems)
+    if (oldRoute) {
+      const route = await storage.getRoute(oldRoute);
+      if (route) {
+        const existingRef = route.recentItems.find(r => r.captureId === captureId);
+        if (existingRef) {
+          existingRef.wasCorrect = false;
+        }
+        await storage.saveRoute(route);
+      }
+    }
 
     reply.redirect(`/dashboard/captures/${captureId}?token=${token}`);
   });
