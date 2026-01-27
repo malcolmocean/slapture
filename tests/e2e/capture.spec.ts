@@ -62,8 +62,8 @@ test.describe('Example Set D: Progressive UI status', () => {
     await page.fill('input#captureInput', 'dump: test from playwright');
     await page.click('button#submitBtn');
 
-    // Wait for success status - using text content check
-    await expect(page.locator('#step-result')).toContainText('Sent to', { timeout: 10000 });
+    // Wait for success status - widget shows "✓ {routeName}" on completion
+    await expect(page.locator('#step-result')).toContainText('append-dump.txt', { timeout: 10000 });
   });
 });
 
