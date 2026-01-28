@@ -124,9 +124,11 @@ Capture to process:
 
 Your options:
 1. Route to existing: {"action": "route", "routeId": "...", "reason": "..."}
-2. Create new route: {"action": "create", "route": {name, description, triggers: [{type, pattern, priority}], destinationType: "fs", destinationConfig: {filePath}, transformScript, schema, createdBy: "mastermind"}, "reason": "..."}
+2. Create new route: {"action": "create", "route": {name, description, triggers: [{type: "regex", pattern, priority, status: "draft"}], destinationType: "fs", destinationConfig: {filePath}, transformScript, schema, createdBy: "mastermind"}, "reason": "..."}
 3. Need clarification: {"action": "clarify", "question": "...", "reason": "..."}
 4. Send to inbox: {"action": "inbox", "reason": "..."}
+
+IMPORTANT: New triggers should use status: "draft" (hypothesis). Draft triggers fire but don't auto-execute - they get validated first. After consistent successful fires (typically 2-4), they graduate to "live".
 
 For transformScript, you have access to: fs (sandboxed), payload, filePath, timestamp, metadata.
 Relative file paths in transformScript are resolved within the user's filestore directory.
@@ -225,6 +227,71 @@ Respond with JSON only.`;
       return {
         action: 'inbox',
         reason: `Failed to parse response: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  /**
+   * Evaluate whether a draft matcher should graduate to live.
+   * Called when a draft matcher fires with enough history.
+   */
+  async evaluateGraduation(
+    route: Route,
+    trigger: Route['triggers'][0],
+    recentFires: Array<{ input: string; timestamp: string }>
+  ): Promise<{ shouldGraduate: boolean; reason: string }> {
+    // Quick heuristics before calling LLM
+    const fireCount = trigger.fireCount ?? 0;
+    if (fireCount < 2) {
+      return { shouldGraduate: false, reason: 'Not enough fires yet (need at least 2)' };
+    }
+
+    // Build prompt for graduation evaluation
+    const prompt = `You are evaluating whether a draft trigger should be promoted to "live" status.
+
+Route: ${route.name}
+Description: ${route.description}
+Trigger pattern: /${trigger.pattern}/i
+
+This trigger has fired ${fireCount} times. Recent inputs that matched:
+${recentFires.slice(0, 5).map(f => `- "${f.input}"`).join('\n')}
+
+Should this trigger be graduated to "live" (auto-execute without validation)?
+
+Consider:
+1. Are these inputs consistent in their intent?
+2. Is the pattern specific enough to avoid false positives?
+3. Would you be confident routing similar future inputs automatically?
+
+Respond with JSON:
+{"graduate": true/false, "reason": "..."}`;
+
+    try {
+      const response = await this.client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      const content = response.content[0];
+      if (content.type !== 'text') {
+        return { shouldGraduate: false, reason: 'Unexpected response type' };
+      }
+
+      const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        return { shouldGraduate: false, reason: 'No JSON in response' };
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        shouldGraduate: !!parsed.graduate,
+        reason: parsed.reason || 'No reason provided',
+      };
+    } catch (error) {
+      return {
+        shouldGraduate: false,
+        reason: `Error: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }

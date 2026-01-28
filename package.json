@@ -10,6 +10,7 @@
     "dev": "tsx watch src/index.ts",
     "test": "vitest",
     "test:evolver": "tsx scripts/run-evolver-tests.ts",
+    "test:validation": "vitest run tests/validation/",
     "test:e2e": "playwright test",
     "seed": "tsx scripts/seed-routes.ts"
   },

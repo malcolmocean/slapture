@@ -395,9 +395,14 @@ UPDATE THIS CHECKLIST AS ITEMS ARE COMPLETED:
 - [x] Non-regex matcher types removed (prefix, keyword, semantic)
 - [x] Draft/live matcher distinction implemented
 - [x] Named confidence levels in validation (ValidationConfidence type added)
-- [ ] Validation sees matcher that fired
+- [x] Validation sees matcher that fired (ValidationContext.matchedTrigger)
 - [ ] Route hygiene triggers on signal (doubtful, reject, correction)
-- [ ] LLM test suite with 3/3 agreement
-- [ ] "gwen_memories + pushups" case correctly returns doubtful/reject
-- [ ] Draft matchers graduate after consistent fires
-- [ ] Mastermind creates draft matchers by default
+- [x] LLM test suite with 3/3 agreement (tests/validation/)
+- [x] "gwen_memories + pushups" case correctly returns doubtful/reject (test case 1)
+- [x] Draft matchers graduate after consistent fires (Mastermind.evaluateGraduation)
+- [x] Mastermind creates draft matchers by default (prompt updated)
+
+---
+
+BONUS:
+- [ ] add a hook that checks if the prompts/harnesses have been modified and re-runs the LLM test suite (test:validation)
