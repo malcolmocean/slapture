@@ -396,7 +396,7 @@ UPDATE THIS CHECKLIST AS ITEMS ARE COMPLETED:
 - [x] Draft/live matcher distinction implemented
 - [x] Named confidence levels in validation (ValidationConfidence type added)
 - [x] Validation sees matcher that fired (ValidationContext.matchedTrigger)
-- [ ] Route hygiene triggers on signal (doubtful, reject, correction)
+- [x] Route hygiene triggers on signal (doubtful, reject, correction)
 - [x] LLM test suite with 3/3 agreement (tests/validation/)
 - [x] "gwen_memories + pushups" case correctly returns doubtful/reject (test case 1)
 - [x] Draft matchers graduate after consistent fires (Mastermind.evaluateGraduation)

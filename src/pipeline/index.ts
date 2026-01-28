@@ -1,6 +1,6 @@
 // src/pipeline/index.ts
 import { v4 as uuidv4 } from 'uuid';
-import { Capture, Route, ExecutionStep, ParseResult, DispatchResult, RouteVersion } from '../types.js';
+import { Capture, Route, ExecutionStep, ParseResult, DispatchResult, RouteVersion, RouteTrigger, getTriggerStatus, getTriggerStats, ValidationConfidence } from '../types.js';
 import { Storage } from '../storage/index.js';
 import { Parser } from '../parser/index.js';
 import { Dispatcher } from '../dispatcher/index.js';
@@ -9,6 +9,8 @@ import { Mastermind, IntegrationContext } from '../mastermind/index.js';
 import { Evolver, EvolverContext } from '../mastermind/evolver.js';
 import { createEvolverTestCase } from '../mastermind/evolver-ratchet.js';
 import { getIntegrationsWithStatus, INTEGRATIONS } from '../integrations/registry.js';
+import { Validator } from '../validation/index.js';
+import { RouteHygiene, HygieneSignal } from '../hygiene/index.js';
 
 export interface PipelineResult {
   capture: Capture;
@@ -22,6 +24,8 @@ export class CapturePipeline {
   private executor: RouteExecutor;
   private mastermind: Mastermind;
   private evolver: Evolver;
+  private validator: Validator;
+  private hygiene: RouteHygiene;
   private codeVersion: string;
 
   constructor(
@@ -36,6 +40,8 @@ export class CapturePipeline {
     this.executor = new RouteExecutor(filestoreRoot, storage);
     this.mastermind = new Mastermind(apiKey);
     this.evolver = new Evolver(apiKey);
+    this.validator = new Validator(apiKey);
+    this.hygiene = new RouteHygiene(storage);
     this.codeVersion = codeVersion;
   }
 
@@ -81,7 +87,70 @@ export class CapturePipeline {
         route = await this.storage.getRoute(dispatchResult.routeId);
       }
 
-      // If no route matched, consult Mastermind
+      // Step 3a: LLM Validation (if trigger-matched route with validation enabled)
+      if (route && dispatchResult.matchedTrigger) {
+        const trigger = dispatchResult.matchedTrigger;
+        const triggerStatus = getTriggerStatus(trigger);
+
+        // Draft triggers don't auto-execute - send to Mastermind with context
+        if (triggerStatus === 'draft') {
+          console.log(`[Pipeline] Draft trigger matched, consulting Mastermind: ${trigger.pattern}`);
+          // Increment fire count for draft graduation tracking
+          await this.updateTriggerFireCount(route, trigger);
+          // Fall through to Mastermind below (set route to null)
+          route = null;
+        }
+        // Live triggers with validation enabled get validated
+        else if (route.validation?.enabled) {
+          const validationStart = Date.now();
+          const { result: validationResult, promptUsed } = await this.validator.validate({
+            route,
+            matchedTrigger: trigger,
+            input: parsed.payload,
+          });
+
+          this.addTrace(capture, 'route_validate', {
+            routeId: route.id,
+            trigger: trigger.pattern,
+            input: parsed.payload,
+          }, {
+            confidence: validationResult.confidence,
+            reasoning: validationResult.reasoning,
+            promptUsed,
+          }, validationStart);
+
+          // Update trigger stats with validation result
+          await this.updateTriggerStats(route, trigger, validationResult.confidence);
+
+          // Handle validation result
+          const action = Validator.getAction(validationResult.confidence);
+          console.log(`[Pipeline] Validation: ${validationResult.confidence} -> ${action}`);
+
+          if (action === 'execute') {
+            // Continue to execution (route stays set)
+          } else if (action === 'execute_flagged') {
+            // Execute but mark as needing review
+            capture.verificationState = 'ai_uncertain';
+          } else if (action === 'mastermind') {
+            // Send to Mastermind for decision
+            route = null;
+          } else if (action === 'mastermind_hygiene') {
+            // Send to Mastermind AND record hygiene signal
+            await this.hygiene.recordValidationSignal(
+              route,
+              trigger,
+              capture.id,
+              parsed.payload,
+              validationResult.confidence as 'doubtful' | 'reject',
+              validationResult.reasoning
+            );
+            route = null;
+          }
+
+        }
+      }
+
+      // If no route matched (or validation rejected), consult Mastermind
       if (!route) {
         console.log(`[Pipeline] No route matched, consulting Mastermind for: "${raw}"`);
         const mastermindStart = Date.now();
@@ -223,6 +292,51 @@ export class CapturePipeline {
       codeVersion: this.codeVersion,
       durationMs: Date.now() - startTime,
     });
+  }
+
+  /**
+   * Update trigger fire count (for draft matcher graduation tracking).
+   */
+  private async updateTriggerFireCount(route: Route, trigger: RouteTrigger): Promise<void> {
+    const triggerIndex = route.triggers.findIndex(t => t.pattern === trigger.pattern);
+    if (triggerIndex === -1) return;
+
+    route.triggers[triggerIndex] = {
+      ...route.triggers[triggerIndex],
+      fireCount: (route.triggers[triggerIndex].fireCount ?? 0) + 1,
+      stats: {
+        ...getTriggerStats(route.triggers[triggerIndex]),
+        totalFires: (getTriggerStats(route.triggers[triggerIndex]).totalFires) + 1,
+        lastFired: new Date().toISOString(),
+      },
+    };
+
+    await this.storage.saveRoute(route);
+  }
+
+  /**
+   * Update trigger stats with validation result.
+   */
+  private async updateTriggerStats(route: Route, trigger: RouteTrigger, confidence: ValidationConfidence): Promise<void> {
+    const triggerIndex = route.triggers.findIndex(t => t.pattern === trigger.pattern);
+    if (triggerIndex === -1) return;
+
+    const currentStats = getTriggerStats(route.triggers[triggerIndex]);
+    route.triggers[triggerIndex] = {
+      ...route.triggers[triggerIndex],
+      fireCount: (route.triggers[triggerIndex].fireCount ?? 0) + 1,
+      stats: {
+        ...currentStats,
+        totalFires: currentStats.totalFires + 1,
+        lastFired: new Date().toISOString(),
+        validationResults: {
+          ...currentStats.validationResults,
+          [confidence]: (currentStats.validationResults[confidence] || 0) + 1,
+        },
+      },
+    };
+
+    await this.storage.saveRoute(route);
   }
 
   /**

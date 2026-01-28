@@ -2,6 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens } from '../types.js';
+import type { HygieneSignal } from '../hygiene/index.js';
 
 export class Storage {
   private dataDir: string;
@@ -423,5 +424,30 @@ export class Storage {
     fs.writeFileSync(globalConfigPath, JSON.stringify(globalConfig, null, 2));
 
     console.log('[Migration] Migrated global tokens to user: default');
+  }
+
+  // Hygiene Signals
+  private getHygieneSignalsPath(): string {
+    return path.join(this.dataDir, 'hygiene-signals.json');
+  }
+
+  async appendHygieneSignal(signal: HygieneSignal): Promise<void> {
+    const signals = await this.getHygieneSignals();
+    signals.push(signal);
+    fs.writeFileSync(this.getHygieneSignalsPath(), JSON.stringify(signals, null, 2));
+  }
+
+  async getHygieneSignals(): Promise<HygieneSignal[]> {
+    const filePath = this.getHygieneSignalsPath();
+    if (!fs.existsSync(filePath)) {
+      return [];
+    }
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return JSON.parse(content) as HygieneSignal[];
+  }
+
+  async getHygieneSignalsForRoute(routeId: string): Promise<HygieneSignal[]> {
+    const signals = await this.getHygieneSignals();
+    return signals.filter(s => s.routeId === routeId);
   }
 }

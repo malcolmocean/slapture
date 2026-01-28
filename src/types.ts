@@ -258,6 +258,8 @@ export interface DispatchResult {
   routeId: string | null;
   confidence: 'high' | 'medium' | 'low' | null;
   reason: string;
+  /** The trigger that matched (for validation context) */
+  matchedTrigger?: RouteTrigger;
 }
 
 export interface MastermindAction {

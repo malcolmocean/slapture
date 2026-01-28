@@ -65,6 +65,7 @@ export class Dispatcher {
       reason: `Matched trigger: ${best.trigger.type}:${best.trigger.pattern}${
         matches.length > 1 ? ` (${matches.length} matches, using highest priority)` : ''
       }`,
+      matchedTrigger: best.trigger,
     };
   }
 
