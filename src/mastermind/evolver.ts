@@ -101,7 +101,15 @@ DEFAULT (use this most of the time):
 {"action": "skip", "reasoning": "The input was correctly routed by Mastermind but doesn't represent a universal pattern - [explain why it's situational]"}
 
 ONLY if clearly missing an obvious pattern:
-{"triggers": [{type, pattern, priority}, ...], "reasoning": "Adding [specific pattern] because it will ALWAYS mean this route: [concrete explanation]"}
+{"triggers": [{"type": "regex", "pattern": "your-regex-here", "priority": 10}, ...], "reasoning": "Adding [specific pattern] because it will ALWAYS mean this route: [concrete explanation]"}
+
+## TRIGGER TYPE: REGEX ONLY
+The ONLY allowed trigger type is "regex". Do NOT use "prefix", "keyword", or any other type - those are deprecated.
+For prefix-like matching, use anchored regex: ^pattern\\b
+For substring matching: pattern (but use sparingly - too broad)
+Examples:
+- Want to match "gwenmem" at start? Use: {"type": "regex", "pattern": "^gwenmem\\\\b", "priority": 10}
+- Want to match "gwen memory" variations? Use: {"type": "regex", "pattern": "gwen\\\\s?memor(y|ies)", "priority": 10}
 
 If modifying transform (rare):
 {"transform": "...", "reasoning": "..."}`;
