@@ -45,7 +45,7 @@ describe('Evolver', () => {
 
       const prompt = evolver.buildPrompt(context);
 
-      expect(prompt).toContain('Slapture Evolver');
+      expect(prompt).toContain('Slapture Mastermind');
       expect(prompt).toContain('gwen_memories');
       expect(prompt).toContain('gwen memories: your hair is curly');
       expect(prompt).toContain('gwen memory');

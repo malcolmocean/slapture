@@ -30,6 +30,7 @@
 //
 import Anthropic from '@anthropic-ai/sdk';
 import { Route, RouteTrigger, EvolverResult, Capture } from '../types.js';
+import { MASTERMIND_PRINCIPLES } from './principles.js';
 
 export interface EvolverContext {
   newInput: string;
@@ -60,24 +61,19 @@ export class Evolver {
       .map(item => `  - "${item.raw}"`)
       .join('\n');
 
-    let prompt = `You are the Slapture Evolver. Your job is to CONSERVATIVELY evolve a route's triggers and/or transform.
+    let prompt = `${MASTERMIND_PRINCIPLES}
 
-## CRITICAL: Default to "skip"
+---
 
-Your default action should be "skip". Only evolve when the new input represents a CLEAR, OBVIOUS pattern that should ALWAYS match this route. Ask yourself: "Is there any reasonable interpretation where this input should NOT go to this route?" If yes, skip.
+## Context: Trigger Evolution
 
-DO NOT overfit. The Mastermind already routed this correctly - you don't need to "capture" every variation. Only add patterns for:
-1. Clear typos/spacing variants of existing triggers (e.g., "gwenmemory" → "gwen memory")
-2. Obvious synonyms that will ALWAYS mean the same thing
-3. Structural patterns where the STRUCTURE itself guarantees the intent
-
-If the input is just "something that could go here this time", that's the Mastermind's job - NOT a trigger.
+You are operating in evolution mode. The Mastermind (you, in routing mode) just routed an input to this route. Now you're deciding whether to add a trigger so similar inputs get auto-routed next time.
 
 ## Current Route: ${route.name}
 Description: ${route.description}
 
-### Triggers (numbered for reference):
-${triggersDesc}
+### Existing Triggers (numbered for reference):
+${triggersDesc || '(none)'}
 
 ### Transform Script:
 ${route.transformScript || '(none)'}
@@ -85,34 +81,40 @@ ${route.transformScript || '(none)'}
 ### Recent Successful Matches:
 ${recentItems || '(none)'}
 
-## New Input That Triggered Evolution
+## New Input That Was Just Routed Here
 "${newInput}"
 
-## Why Mastermind Matched It
+## Why It Was Routed Here
 ${mastermindReason}
 
 ## Your Task
-Decide if this input reveals an OBVIOUS, ALWAYS-CORRECT pattern that's missing from triggers. Most of the time, the answer is NO - the Mastermind handled it, that's fine.
+
+The Mastermind routed this input, but it required LLM judgment. Your job: should there be a trigger that catches this automatically next time?
+
+If this looks like a user habit or shorthand (a word/phrase they'd likely repeat), add it as a draft trigger. If it's a one-off phrasing or genuinely ambiguous between multiple routes, skip.
+
+Draft triggers are cheap - the validation layer tests them. Skipping means future similar inputs still need Mastermind consultation.
 
 ## Response Format
+
 Respond with JSON only:
 
-DEFAULT (use this most of the time):
-{"action": "skip", "reasoning": "The input was correctly routed by Mastermind but doesn't represent a universal pattern - [explain why it's situational]"}
+To skip (input is one-off or ambiguous):
+{"action": "skip", "reasoning": "..."}
 
-ONLY if clearly missing an obvious pattern:
-{"triggers": [{"type": "regex", "pattern": "your-regex-here", "priority": 10}, ...], "reasoning": "Adding [specific pattern] because it will ALWAYS mean this route: [concrete explanation]"}
+To add trigger(s):
+{"triggers": [{"type": "regex", "pattern": "your-regex-here", "priority": 10, "status": "draft"}, ...], "reasoning": "..."}
 
-## TRIGGER TYPE: REGEX ONLY
-The ONLY allowed trigger type is "regex". Do NOT use "prefix", "keyword", or any other type - those are deprecated.
-For prefix-like matching, use anchored regex: ^pattern\\b
-For substring matching: pattern (but use sparingly - too broad)
-Examples:
-- Want to match "gwenmem" at start? Use: {"type": "regex", "pattern": "^gwenmem\\\\b", "priority": 10}
-- Want to match "gwen memory" variations? Use: {"type": "regex", "pattern": "gwen\\\\s?memor(y|ies)", "priority": 10}
+To modify transform (rare):
+{"transform": "...", "reasoning": "..."}
 
-If modifying transform (rare):
-{"transform": "...", "reasoning": "..."}`;
+## Trigger Rules
+
+- ONLY "regex" type is allowed (prefix, keyword are deprecated)
+- New triggers MUST have "status": "draft" - they graduate to "live" after validation
+- For prefix-like matching, use anchored regex: ^pattern\\b
+- Avoid overly broad patterns like "^log" that match unrelated things
+- User-specific shorthands like "liftlog" or "moodlog" are good - they're distinctive`;
 
     // Add validation failure context on retry
     if (validationFailure) {
