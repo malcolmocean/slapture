@@ -231,6 +231,22 @@ Does this input belong to this route?
 
 Consider: does this match the pattern of recent items? Does it fit the expected format?
 Respond with JSON only.
+
+Note: the same input may be entered with many different strings. Your job is to discern different *intent*.
+
+eg same intent, different strings:
+- later today: do xyz
+- do xyz this evening
+
+eg different intent, similar strings:
+- gwen height 32"
+- jump height 30"
+
+eg same ultimate intent, but needs different treatment:
+- weight 88.2kg
+- weight 192.9
+(the latter is the same-ish figure, but in a different unit)
+
 ```
 
 ### Validation Flow
@@ -632,12 +648,12 @@ If any component fails:
 - [x] Playwright tests cover OAuth flow with test credentials
 
 ### Phase 3
-- [ ] Dashboard shows all captures with filtering
-- [ ] User can verify captures (sets human_verified)
-- [ ] User can correct misrouted captures
+- [x] Dashboard shows all captures with filtering
+- [x] User can verify captures (sets human_verified)
+- [x] User can correct misrouted captures
 - [ ] Route editing works
-- [ ] Test suite view shows verified captures
-- [ ] Changes validated against test suite
+- [x] Test suite view shows verified captures
+- [x] Changes validated against test suite
 
 ### Phase 4
 - [ ] LLM validation prevents "weight of evidence" → weightlog
@@ -676,3 +692,4 @@ For tmux/Claude Code orchestration pattern, see: https://github.com/KyleHerndon/
   - but also! they should be able to add those updates by just giving an update to the system AS TOP-LEVEL INPUT!
     - like "intend intentions are only for today, so if something doesn't say 'today' then don't put it there!"
     - or "if I say message Jess, use whatsapp"
+- [ ] if it's not sure, it'll ask (- jarred)
