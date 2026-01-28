@@ -69,40 +69,8 @@ describe('Dispatcher', () => {
       expect(result.reason).toContain('No route named');
     });
 
-    it('should match explicit route by trigger pattern (multi-word)', () => {
-      const routeWithMultiWordTrigger: Route[] = [
-        ...routes,
-        {
-          id: 'route-gwen',
-          name: 'gwen-memories',
-          description: 'Log memories for Gwen',
-          triggers: [
-            { type: 'prefix', pattern: 'gwen memory', priority: 10 },
-            { type: 'prefix', pattern: 'log', priority: 5 },
-          ],
-          schema: null,
-          recentItems: [],
-          destinationType: 'fs',
-          destinationConfig: { filePath: 'gwen_memories.csv' },
-          transformScript: null,
-          createdAt: '2026-01-21T12:00:00Z',
-          createdBy: 'mastermind',
-          lastUsed: null,
-        },
-      ];
-      const dispatcherWithGwen = new Dispatcher(routeWithMultiWordTrigger);
-
-      const parsed: ParseResult = {
-        explicitRoute: 'gwen memory',
-        payload: 'first word!',
-        metadata: {},
-      };
-
-      const result = dispatcherWithGwen.dispatch(parsed);
-
-      expect(result.routeId).toBe('route-gwen');
-      expect(result.confidence).toBe('high');
-    });
+    // Note: Matching explicit route by prefix trigger pattern was removed in Phase 4.
+    // Explicit routes now match by name only, not by trigger patterns.
   });
 
   describe('trigger matching', () => {

@@ -245,35 +245,21 @@ ${validationFailure.otherRoutesTriggers.map(r =>
 
   /**
    * Check if input matches any of the triggers
+   * Phase 4: Only regex triggers are supported
    */
   private matchesTriggers(input: string, triggers: RouteTrigger[]): boolean {
-    const normalizedInput = input.toLowerCase().trim();
-
     for (const trigger of triggers) {
-      switch (trigger.type) {
-        case 'prefix':
-          if (normalizedInput.startsWith(trigger.pattern.toLowerCase())) {
-            return true;
-          }
-          break;
-        case 'keyword':
-          if (normalizedInput.includes(trigger.pattern.toLowerCase())) {
-            return true;
-          }
-          break;
-        case 'regex':
-          try {
-            const regex = new RegExp(trigger.pattern, 'i');
-            if (regex.test(input)) {
-              return true;
-            }
-          } catch {
-            // Invalid regex, skip
-          }
-          break;
-        case 'semantic':
-          // Semantic matching would require LLM - skip for validation
-          break;
+      if (trigger.type !== 'regex') {
+        continue; // Only regex triggers supported
+      }
+
+      try {
+        const regex = new RegExp(trigger.pattern, 'i');
+        if (regex.test(input)) {
+          return true;
+        }
+      } catch {
+        // Invalid regex, skip
       }
     }
 

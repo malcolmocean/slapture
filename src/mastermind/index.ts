@@ -137,10 +137,14 @@ Common patterns:
 
 When creating routes for "log X to Y" patterns:
 1. Extract the filename (e.g., "gwen_memories.csv")
-2. Create a natural shorthand trigger from the filename (e.g., "gwen memory" from "gwen_memories")
-3. Include BOTH "log" prefix trigger AND the shorthand in the triggers array
+2. Create specific regex triggers that match the intent (e.g., /gwen\\s?memor(y|ies)/i)
+3. Prefer specific patterns over broad ones - avoid overly permissive regexes
 4. Use relative filenames in transformScript - they resolve within the user directory
 5. Route names should be descriptive: use the filename without extension (e.g., "gwen_memories" not "route-123")
+
+Trigger types: Only "regex" is supported. Use regex patterns like:
+- /^pattern\\b/i for prefix-like matching
+- /pattern/i for substring matching (use sparingly - can be too broad)
 
 For CSV files, include date as first column. For log files, prefix each line with date.
 

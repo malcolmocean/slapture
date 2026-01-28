@@ -11,24 +11,27 @@ Add semantic intelligence at the route level so that:
 
 ## Key Design Decisions
 
-### 1. Kill Prefix Routes
+### 1. Regex Only - Kill All Other Trigger Types
 
-Prefix routes are a foot-gun. They encourage overly broad matching (e.g., `log` catching everything starting with "log").
+All non-regex trigger types are foot-guns:
+- **prefix**: Encourages overly broad matching (e.g., `log` catching everything starting with "log")
+- **keyword**: Even worse - substring matching is too permissive
+- **semantic**: Never implemented, and LLM-based matching belongs in the validation layer, not triggers
 
-**Decision:** Hard cut. Remove prefix trigger support entirely. Existing routes with prefix triggers will fail to match - the system self-repairs when new inputs arrive and trigger route creation/modification.
+**Decision:** Hard cut. Remove prefix, keyword, and semantic trigger types entirely. Only regex remains. Existing routes with non-regex triggers will fail to match - the system self-repairs when new inputs arrive and trigger route creation/modification.
 
 Regex is strictly more expressive. What was `prefix: "log"` can be `regex: /^log\b/` if truly needed, but the Mastermind should be more thoughtful about creating broad matchers.
 
-### 2. Soft Routes (Hypothesis → Graduation)
+### 2. Draft Routes (Hypothesis → Graduation)
 
 The Mastermind shouldn't auto-create routes on first novel input. Instead:
 
 ```
 Novel input arrives
         ↓
-Mastermind creates SOFT route (hypothesis)
+Mastermind creates DRAFT route (hypothesis)
         ↓
-Soft route FIRES on future matches, but doesn't auto-execute
+Draft route FIRES on future matches, but doesn't auto-execute
         ↓
 Input goes to Mastermind with context:
   - "Draft route matched: /gwen\s?memor(y|ies)/ → gwen_memories.csv"
@@ -36,11 +39,11 @@ Input goes to Mastermind with context:
   - "Previous fires: [input1], [input2]"
         ↓
 Mastermind decides:
-  - "3 fires, consistent format → GRADUATE to hard route"
-  - OR "2 fires but inputs differ → keep soft, route manually"
+  - "3 fires, consistent format → GRADUATE to live route"
+  - OR "2 fires but inputs differ → keep draft, route manually"
 ```
 
-The soft route accumulates evidence. The Mastermind sees the hypothesis being tested and graduates it when confident (typically 2-4 consistent fires).
+The draft route accumulates evidence. The Mastermind sees the hypothesis being tested and graduates it when confident (typically 2-4 consistent fires).
 
 ### 3. Routes Can Have Zero Matchers
 
@@ -51,8 +54,8 @@ Route = Destination + optional Matchers
 
 Matchers trigger automatic routing (when confident)
 No matchers = Mastermind always decides
-Soft matchers = hypothesis being tested
-Hard matchers = graduated, auto-execute
+Draft matchers = hypothesis being tested
+Live matchers = graduated, auto-execute
 ```
 
 Some destinations:
@@ -104,7 +107,7 @@ No timers or polling. Route review triggers on *signal*:
 | Signal | What happens |
 |--------|--------------|
 | Validation returns `doubtful` or `reject` | "This input didn't belong - is the route misconfigured?" |
-| Soft route fires | "Evaluating whether to graduate this matcher" |
+| Draft route fires | "Evaluating whether to graduate this matcher" |
 | User correction | "User said this was wrong - what needs fixing?" |
 | Mastermind routes manually to a route with matchers | "Why didn't matchers catch this? Should they be broadened?" |
 
@@ -175,10 +178,10 @@ interface Route {
 }
 
 interface Matcher {
-  type: 'regex';  // prefix type removed!
+  type: 'regex';  // prefix, keyword, semantic all removed - regex only!
   pattern: string;
-  status: 'soft' | 'hard';  // hypothesis vs graduated
-  fireCount: number;        // for soft matchers
+  status: 'draft' | 'live';  // hypothesis vs graduated
+  fireCount: number;         // for draft matchers
   stats: {
     totalFires: number;
     lastFired: Date | null;
@@ -245,16 +248,16 @@ Dispatcher checks matchers
 ┌─────────────────────────────────────┐
 │ No match?                           │
 │   → Mastermind handles              │
-│   → May create soft route           │
+│   → May create draft route          │
 └─────────────────────────────────────┘
       ↓ (match found)
 ┌─────────────────────────────────────┐
-│ Soft matcher?                       │
+│ Draft matcher?                      │
 │   → Don't auto-execute              │
 │   → Send to Mastermind with context │
 │   → Mastermind may graduate it      │
 └─────────────────────────────────────┘
-      ↓ (hard matcher)
+      ↓ (live matcher)
 ┌─────────────────────────────────────┐
 │ Validation enabled?                 │
 │   → Call Haiku/Sonnet               │
@@ -363,7 +366,7 @@ Reason: Could be separate baby weight tracking
 
 When Mastermind creates routes, it should:
 1. Prefer specific regexes over broad ones
-2. Create soft matchers by default (graduate after evidence)
+2. Create draft matchers by default (graduate after evidence)
 3. Consider: "Could this pattern match unintended things?"
 4. When adding a new matcher, evaluate existing matchers for redundancy
 
@@ -387,12 +390,14 @@ Present findings to LLM for interpretation and action recommendation.
 
 ## Success Criteria
 
-- [ ] Prefix matcher type removed
-- [ ] Soft/hard matcher distinction implemented
-- [ ] Named confidence levels in validation
+UPDATE THIS CHECKLIST AS ITEMS ARE COMPLETED:
+
+- [x] Non-regex matcher types removed (prefix, keyword, semantic)
+- [x] Draft/live matcher distinction implemented
+- [x] Named confidence levels in validation (ValidationConfidence type added)
 - [ ] Validation sees matcher that fired
 - [ ] Route hygiene triggers on signal (doubtful, reject, correction)
 - [ ] LLM test suite with 3/3 agreement
 - [ ] "gwen_memories + pushups" case correctly returns doubtful/reject
-- [ ] Soft matchers graduate after consistent fires
-- [ ] Mastermind creates soft matchers by default
+- [ ] Draft matchers graduate after consistent fires
+- [ ] Mastermind creates draft matchers by default

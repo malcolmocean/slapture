@@ -13,22 +13,11 @@ export class Dispatcher {
   }
 
   dispatch(parsed: ParseResult): DispatchResult {
-    // If explicit route specified, look for match by name or trigger pattern
+    // If explicit route specified, look for match by name
     if (parsed.explicitRoute) {
-      // First try exact name match
-      let route = this.routes.find(
+      const route = this.routes.find(
         r => r.name.toLowerCase() === parsed.explicitRoute?.toLowerCase()
       );
-
-      // If no name match, check if any route has a trigger that matches the explicit route
-      if (!route) {
-        route = this.routes.find(r =>
-          r.triggers.some(t =>
-            t.type === 'prefix' &&
-            t.pattern.toLowerCase() === parsed.explicitRoute?.toLowerCase()
-          )
-        );
-      }
 
       if (route) {
         return {
@@ -80,27 +69,16 @@ export class Dispatcher {
   }
 
   private triggerMatches(trigger: Route['triggers'][0], payload: string): boolean {
-    switch (trigger.type) {
-      case 'prefix':
-        return payload.toLowerCase().startsWith(trigger.pattern.toLowerCase());
+    // Phase 4: Only regex triggers remain
+    if (trigger.type !== 'regex') {
+      return false;
+    }
 
-      case 'regex':
-        try {
-          const regex = new RegExp(trigger.pattern, 'i');
-          return regex.test(payload);
-        } catch {
-          return false;
-        }
-
-      case 'keyword':
-        return payload.toLowerCase().includes(trigger.pattern.toLowerCase());
-
-      case 'semantic':
-        // Semantic matching would require LLM - skip in dispatcher
-        return false;
-
-      default:
-        return false;
+    try {
+      const regex = new RegExp(trigger.pattern, 'i');
+      return regex.test(payload);
+    } catch {
+      return false;
     }
   }
 }

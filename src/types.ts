@@ -67,6 +67,25 @@ export interface NotesDestinationConfig {
   id: string;
 }
 
+/**
+ * Configuration for LLM validation at the route level.
+ */
+export interface RouteValidation {
+  enabled: boolean;
+  model: 'haiku' | 'sonnet';
+  prompt: string | null;  // Custom prompt, or use default template
+}
+
+/**
+ * Context used for LLM validation - provides few-shot examples.
+ */
+export interface RouteValidationContext {
+  /** Items that were rejected or corrected (didn't belong here) */
+  negativeExamples: CaptureRef[];
+  /** Items that were plausible/unsure but ultimately belonged */
+  edgeCases: CaptureRef[];
+}
+
 export interface Route {
   id: string;
   name: string;
@@ -75,6 +94,7 @@ export interface Route {
   triggers: RouteTrigger[];
 
   schema: string | null;
+  /** Recent successful items (serves as positive examples for validation) */
   recentItems: CaptureRef[];
 
   destinationType: 'fs' | 'intend' | 'notes';
@@ -89,12 +109,110 @@ export interface Route {
   lastUsed: string | null;
 
   versions?: RouteVersion[]; // Version history, newest first
+
+  /** LLM validation configuration for this route */
+  validation?: RouteValidation;
+
+  /** Context for validation (negative examples, edge cases) */
+  validationContext?: RouteValidationContext;
 }
 
+/**
+ * Named confidence levels for LLM validation.
+ * LLMs are bad at numeric confidence - use these semantic levels instead.
+ */
+export type ValidationConfidence =
+  | 'certain'    // Unambiguously same intent as items here → Execute
+  | 'confident'  // Very likely same intent, minor surface differences → Execute
+  | 'plausible'  // Could belong here, but something's slightly off → Execute, flag for review
+  | 'unsure'     // Genuinely ambiguous - could go either way → Mastermind decides
+  | 'doubtful'   // Probably doesn't belong, but I see why it matched → Mastermind decides + hygiene signal
+  | 'reject';    // Definitely wrong route, matcher is misfiring → Mastermind + trigger route hygiene
+
+/**
+ * Statistics tracked per trigger for hygiene analysis.
+ */
+export interface TriggerStats {
+  totalFires: number;
+  lastFired: string | null;  // ISO 8601
+  validationResults: Record<ValidationConfidence, number>;
+}
+
+/**
+ * Route trigger/matcher configuration.
+ * Phase 4: Only regex type remains. prefix/keyword/semantic were removed.
+ */
 export interface RouteTrigger {
-  type: 'prefix' | 'regex' | 'keyword' | 'semantic';
+  type: 'regex';
   pattern: string;
   priority: number;
+
+  /** Draft matchers are hypotheses that need graduation. Live matchers auto-execute. Defaults to 'live'. */
+  status?: 'draft' | 'live';
+
+  /** Number of times this trigger has fired (used for draft matcher graduation). Defaults to 0. */
+  fireCount?: number;
+
+  /** Statistics for route hygiene analysis. Defaults to empty stats. */
+  stats?: TriggerStats;
+}
+
+/**
+ * Helper to create a trigger with all defaults filled in.
+ */
+export function createTrigger(
+  pattern: string,
+  options?: {
+    priority?: number;
+    status?: 'draft' | 'live';
+    fireCount?: number;
+    stats?: TriggerStats;
+  }
+): RouteTrigger {
+  return {
+    type: 'regex',
+    pattern,
+    priority: options?.priority ?? 10,
+    status: options?.status ?? 'live',
+    fireCount: options?.fireCount ?? 0,
+    stats: options?.stats ?? {
+      totalFires: 0,
+      lastFired: null,
+      validationResults: {
+        certain: 0,
+        confident: 0,
+        plausible: 0,
+        unsure: 0,
+        doubtful: 0,
+        reject: 0,
+      },
+    },
+  };
+}
+
+/**
+ * Get trigger status with default
+ */
+export function getTriggerStatus(trigger: RouteTrigger): 'draft' | 'live' {
+  return trigger.status ?? 'live';
+}
+
+/**
+ * Get trigger stats with defaults
+ */
+export function getTriggerStats(trigger: RouteTrigger): TriggerStats {
+  return trigger.stats ?? {
+    totalFires: 0,
+    lastFired: null,
+    validationResults: {
+      certain: 0,
+      confident: 0,
+      plausible: 0,
+      unsure: 0,
+      doubtful: 0,
+      reject: 0,
+    },
+  };
 }
 
 export interface CaptureRef {
