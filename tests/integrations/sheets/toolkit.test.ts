@@ -137,4 +137,43 @@ describe.skipIf(!hasCredentials)('Sheets Toolkit (integration)', () => {
       expect(result.index).toBe(3);
     });
   });
+
+  describe('lookup with fuzzy match', () => {
+    it('should use fuzzyMatcher callback to find best match', async () => {
+      // Mock fuzzy matcher that finds "No Bad Parts" when given "bad parts"
+      const mockFuzzyMatcher = async (candidates: string[], target: string): Promise<number | null> => {
+        const lowerTarget = target.toLowerCase();
+        for (let i = 0; i < candidates.length; i++) {
+          if (candidates[i].toLowerCase().includes(lowerTarget)) {
+            return i;
+          }
+        }
+        return null;
+      };
+
+      const result = await lookup(sheetRef, {
+        axis: 'row',
+        at: 4,  // column E (title)
+        value: 'bad parts',
+        match: 'fuzzy',
+        fuzzyMatcher: mockFuzzyMatcher,
+        range: [2, 50],
+      });
+
+      expect(result.index).not.toBeNull();
+      expect(result.matchedValue).toContain('No Bad Parts');
+    });
+
+    it('should throw if fuzzy match requested without matcher', async () => {
+      await expect(
+        lookup(sheetRef, {
+          axis: 'row',
+          at: 4,
+          value: 'something',
+          match: 'fuzzy',
+          range: [2, 50],
+        })
+      ).rejects.toThrow('fuzzyMatcher callback required');
+    });
+  });
 });
