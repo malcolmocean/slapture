@@ -6,9 +6,9 @@
 - [x] **Tiered validation** - New `validateChangesTiered()` in `src/mastermind/evolver.ts` categorizes captures by verification state
 - [x] **Evolver prompt** - Updated `buildPrompt()` to include soft-protected and freed captures with relative dates
 - [x] **Response parsing** - Updated `parseResponse()` to handle `overrideJustifications` and `freedCaptureActions`
-- [ ] **Review queue storage** - `src/storage/trigger-reviews.ts`
-- [ ] **Pipeline integration** - Execute freed capture actions after evolution
-- [ ] **Dashboard UI** - Review queue for pending trigger changes
+- [x] **Review queue storage** - Methods added to `src/storage/index.ts`
+- [x] **Pipeline integration** - Execute freed capture actions after evolution
+- [x] **Dashboard UI** - Review queue for pending trigger changes
 
 ## Problem
 

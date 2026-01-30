@@ -1,12 +1,12 @@
 // src/pipeline/index.ts
 import { v4 as uuidv4 } from 'uuid';
-import { Capture, Route, ExecutionStep, ParseResult, DispatchResult, RouteVersion, RouteTrigger, getTriggerStatus, getTriggerStats, ValidationConfidence } from '../types.js';
+import { Capture, Route, ExecutionStep, ParseResult, DispatchResult, RouteVersion, RouteTrigger, getTriggerStatus, getTriggerStats, ValidationConfidence, FreedCaptureAction } from '../types.js';
 import { Storage } from '../storage/index.js';
 import { Parser } from '../parser/index.js';
 import { Dispatcher } from '../dispatcher/index.js';
 import { RouteExecutor } from '../routes/executor.js';
 import { Mastermind, IntegrationContext } from '../mastermind/index.js';
-import { Evolver, EvolverContext } from '../mastermind/evolver.js';
+import { Evolver, EvolverContext, TieredValidationResult } from '../mastermind/evolver.js';
 import { createEvolverTestCase } from '../mastermind/evolver-ratchet.js';
 import { getIntegrationsWithStatus, INTEGRATIONS } from '../integrations/registry.js';
 import { Validator } from '../validation/index.js';
@@ -458,61 +458,128 @@ export class CapturePipeline {
         return null;
       }
 
-      // Validate proposed changes
+      // Validate proposed changes with tiered protection
       const proposedTriggers = result.triggers || route.triggers;
-      const validation = this.evolver.validateChanges(
+      const tieredValidation = this.evolver.validateChangesTiered(
         proposedTriggers,
         route.id,
         allCaptures,
         allRoutes
       );
 
-      if (validation.passed) {
-        // Apply changes
-        const updatedRoute = this.applyEvolution(route, result, newInput);
-        await this.storage.saveRoute(updatedRoute);
-        // Add trace for successful evolution
-        // Include full route snapshot as shown to the LLM (BEFORE evolution was applied)
-        this.addTrace(capture, 'evolve', {
-          dynamicInput: {
-            newInput,
-            mastermindReason,
-            attempt,
-            routeSnapshot: {
-              id: route.id,
-              name: route.name,
-              description: route.description,
-              triggers: route.triggers,
-              transformScript: route.transformScript,
-              recentItems: route.recentItems.slice(0, 5),  // matches buildPrompt limit
-            },
-            validationFailure: context.validationFailure,
+      // Check for hard-blocked captures (human_verified) - these block evolution
+      if (tieredValidation.hardBlocked.length > 0) {
+        const errors = tieredValidation.hardBlocked.map(c =>
+          `Hard-blocked (human_verified): "${c.raw}" would no longer match`
+        );
+        console.log(`[Pipeline] Evolution blocked by human-verified captures: ${errors.join(', ')}`);
+
+        context = {
+          ...context,
+          validationFailure: {
+            errors,
+            otherRoutesTriggers: attempt >= 2
+              ? allRoutes.filter(r => r.id !== route.id).map(r => ({ routeName: r.name, triggers: r.triggers }))
+              : undefined,
           },
-          staticPrompt: promptUsed,
-        }, { ...result, validationPassed: true, retriesUsed: attempt }, evolverStart);
-        console.log(`[Pipeline] Evolution applied to route ${route.name}`);
-
-        // Auto-save test case for ratcheting system (evolved = ratchet case)
-        await this.saveEvolverTestCase(route, newInput, mastermindReason, promptUsed, result);
-
-        return updatedRoute;
+        };
+        continue; // Retry with error context
       }
 
-      // Validation failed - prepare retry context
-      console.log(`[Pipeline] Validation failed: ${validation.errors.join(', ')}`);
+      // Check for soft-blocked or freed captures that need evolver response
+      const needsTieredContext = (tieredValidation.softBlocked.length > 0 || tieredValidation.freedCaptures.length > 0)
+        && !context.tieredValidation; // Only add context once
 
-      context = {
-        ...context,
-        validationFailure: {
-          errors: validation.errors,
-          // Add other routes' triggers on 2nd+ retry
-          otherRoutesTriggers: attempt >= 2
-            ? allRoutes
-                .filter(r => r.id !== route.id)
-                .map(r => ({ routeName: r.name, triggers: r.triggers }))
-            : undefined,
+      if (needsTieredContext) {
+        console.log(`[Pipeline] Retrying with tiered context: ${tieredValidation.softBlocked.length} soft-blocked, ${tieredValidation.freedCaptures.length} freed`);
+        context = {
+          ...context,
+          tieredValidation,
+        };
+        continue; // Retry so evolver can provide overrideJustifications and freedCaptureActions
+      }
+
+      // Check for collision errors
+      if (tieredValidation.collisions.length > 0) {
+        console.log(`[Pipeline] Validation failed due to collisions: ${tieredValidation.collisions.join(', ')}`);
+        context = {
+          ...context,
+          validationFailure: {
+            errors: tieredValidation.collisions,
+            otherRoutesTriggers: attempt >= 2
+              ? allRoutes.filter(r => r.id !== route.id).map(r => ({ routeName: r.name, triggers: r.triggers }))
+              : undefined,
+          },
+        };
+        continue;
+      }
+
+      // Check that soft-blocked overrides have justifications
+      if (tieredValidation.softBlocked.length > 0) {
+        const missingJustifications = tieredValidation.softBlocked.filter((_, idx) => {
+          const key = String(idx + 1);
+          return !result.overrideJustifications?.[key];
+        });
+
+        if (missingJustifications.length > 0) {
+          const errors = missingJustifications.map(c =>
+            `Missing justification for overriding ai_certain capture: "${c.raw}"`
+          );
+          console.log(`[Pipeline] Missing override justifications: ${errors.join(', ')}`);
+          context = {
+            ...context,
+            validationFailure: { errors },
+          };
+          continue;
+        }
+      }
+
+      // Validation passed - apply evolution
+      const updatedRoute = this.applyEvolution(route, result, newInput);
+      await this.storage.saveRoute(updatedRoute);
+
+      // Process freed capture actions if present
+      if (result.freedCaptureActions && tieredValidation.freedCaptures.length > 0) {
+        await this.processFreedCaptureActions(
+          result.freedCaptureActions,
+          tieredValidation.freedCaptures
+        );
+      }
+
+      // Add trace for successful evolution
+      // Include full route snapshot as shown to the LLM (BEFORE evolution was applied)
+      this.addTrace(capture, 'evolve', {
+        dynamicInput: {
+          newInput,
+          mastermindReason,
+          attempt,
+          routeSnapshot: {
+            id: route.id,
+            name: route.name,
+            description: route.description,
+            triggers: route.triggers,
+            transformScript: route.transformScript,
+            recentItems: route.recentItems.slice(0, 5),  // matches buildPrompt limit
+          },
+          validationFailure: context.validationFailure,
+          tieredValidation: context.tieredValidation ? {
+            softBlockedCount: context.tieredValidation.softBlocked.length,
+            freedCapturesCount: context.tieredValidation.freedCaptures.length,
+          } : undefined,
         },
-      };
+        staticPrompt: promptUsed,
+      }, {
+        ...result,
+        validationPassed: true,
+        retriesUsed: attempt,
+        freedCapturesProcessed: tieredValidation.freedCaptures.length,
+      }, evolverStart);
+      console.log(`[Pipeline] Evolution applied to route ${route.name}`);
+
+      // Auto-save test case for ratcheting system (evolved = ratchet case)
+      await this.saveEvolverTestCase(route, newInput, mastermindReason, promptUsed, result);
+
+      return updatedRoute;
     }
 
     // All retries exhausted - add trace
@@ -575,6 +642,62 @@ export class CapturePipeline {
         },
       ],
     };
+  }
+
+  /**
+   * Process freed capture actions after successful evolution.
+   * - RE_ROUTE: Re-dispatch capture through pipeline (with new routeFinal cleared)
+   * - LEAVE_AS_HISTORICAL: Set retiredFromTests: true
+   * - MARK_FOR_REVIEW: Set routingReviewQueued: true
+   */
+  private async processFreedCaptureActions(
+    actions: Record<string, { action: FreedCaptureAction; suggestedRoute?: string; reasoning: string }>,
+    freedCaptures: Capture[]
+  ): Promise<void> {
+    for (const [indexStr, actionData] of Object.entries(actions)) {
+      const index = parseInt(indexStr, 10) - 1; // Convert 1-based to 0-based
+      if (index < 0 || index >= freedCaptures.length) {
+        console.log(`[Pipeline] Invalid freed capture index: ${indexStr}`);
+        continue;
+      }
+
+      const capture = freedCaptures[index];
+      console.log(`[Pipeline] Processing freed capture "${capture.raw}" with action: ${actionData.action}`);
+
+      switch (actionData.action) {
+        case 'RE_ROUTE': {
+          // Clear the final route so it gets re-routed
+          capture.routeFinal = null;
+          capture.routeProposed = actionData.suggestedRoute || null;
+          capture.verificationState = 'pending';
+          capture.executionResult = 'pending';
+          await this.storage.updateCapture(capture);
+          console.log(`[Pipeline] Freed capture "${capture.raw}" queued for re-routing`);
+          // Note: Actual re-routing would happen on next pipeline process or via a separate job
+          // We don't re-process here to avoid infinite loops
+          break;
+        }
+
+        case 'LEAVE_AS_HISTORICAL': {
+          capture.retiredFromTests = true;
+          capture.retiredReason = actionData.reasoning;
+          await this.storage.updateCapture(capture);
+          console.log(`[Pipeline] Freed capture "${capture.raw}" marked as historical`);
+          break;
+        }
+
+        case 'MARK_FOR_REVIEW': {
+          capture.routingReviewQueued = true;
+          capture.suggestedReroute = actionData.suggestedRoute || null;
+          await this.storage.updateCapture(capture);
+          console.log(`[Pipeline] Freed capture "${capture.raw}" queued for review`);
+          break;
+        }
+
+        default:
+          console.log(`[Pipeline] Unknown freed capture action: ${actionData.action}`);
+      }
+    }
   }
 
   /**

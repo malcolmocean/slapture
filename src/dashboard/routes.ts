@@ -696,4 +696,253 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
 
     reply.redirect(`/dashboard/test-suite?token=${token}`);
   });
+
+  // Trigger Change Reviews list
+  server.get<{ Querystring: { token: string; status?: string } }>('/dashboard/reviews', async (request, reply) => {
+    const { token, status } = request.query;
+
+    const filterStatus = status === 'all' ? undefined : (status as 'pending' | 'approved' | 'rejected' | undefined) || 'pending';
+    const reviews = await storage.listTriggerReviews(filterStatus);
+    const routes = await storage.listRoutes();
+    const routeNames = new Map(routes.map(r => [r.id, r.name]));
+
+    const statuses = ['pending', 'approved', 'rejected', 'all'];
+
+    const reviewBadgeClass = (s: string) => ({
+      pending: 'badge-warning',
+      approved: 'badge-success',
+      rejected: 'badge-danger',
+    }[s] || 'badge-secondary');
+
+    const content = `
+      <h1>Trigger Change Reviews</h1>
+      <p class="text-muted" style="margin-bottom: 1rem;">
+        Reviews are created when the evolver proposes trigger changes that would affect human-verified captures.
+      </p>
+
+      <form class="filter-bar" method="get" action="/dashboard/reviews">
+        <input type="hidden" name="token" value="${token}">
+        <select name="status" onchange="this.form.submit()">
+          ${statuses.map(s => `<option value="${s}" ${(status || 'pending') === s ? 'selected' : ''}>${s === 'all' ? 'All Statuses' : s.charAt(0).toUpperCase() + s.slice(1)}</option>`).join('')}
+        </select>
+      </form>
+
+      <div class="card">
+        ${reviews.length === 0 ? '<p class="empty-state">No trigger change reviews</p>' : `
+          <table>
+            <thead>
+              <tr>
+                <th>Route</th>
+                <th>Created</th>
+                <th>Affected Captures</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${reviews.map(r => `
+                <tr>
+                  <td><strong>${escapeHtml(routeNames.get(r.routeId) || r.routeId)}</strong></td>
+                  <td>${formatDate(r.createdAt)}</td>
+                  <td>${r.affectedCaptures.length}</td>
+                  <td><span class="badge ${reviewBadgeClass(r.status)}">${r.status}</span></td>
+                  <td>
+                    <a href="/dashboard/reviews/${r.id}?token=${token}" class="btn btn-secondary">View</a>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+    `;
+
+    reply.type('text/html').send(layout('Trigger Reviews', content, token));
+  });
+
+  // Review detail
+  server.get<{
+    Params: { reviewId: string };
+    Querystring: { token: string };
+  }>('/dashboard/reviews/:reviewId', async (request, reply) => {
+    const { reviewId } = request.params;
+    const { token } = request.query;
+
+    const review = await storage.getTriggerReview(reviewId);
+    if (!review) {
+      return reply.code(404).type('text/html').send(layout('Not Found', '<h1>Review not found</h1>', token));
+    }
+
+    const route = await storage.getRoute(review.routeId);
+    const routes = await storage.listRoutes();
+    const routeNames = new Map(routes.map(r => [r.id, r.name]));
+
+    const actionBadgeClass = (action: string) => ({
+      RE_ROUTE: 'badge-info',
+      MARK_FOR_REVIEW: 'badge-warning',
+      LEAVE_AS_HISTORICAL: 'badge-secondary',
+    }[action] || 'badge-secondary');
+
+    const content = `
+      <h1>Trigger Change Review</h1>
+
+      <div class="card">
+        <h3>Overview</h3>
+        <table>
+          <tr><td><strong>Route</strong></td><td><a href="/dashboard/routes/${review.routeId}?token=${token}">${escapeHtml(route?.name || review.routeId)}</a></td></tr>
+          <tr><td><strong>Status</strong></td><td><span class="badge ${review.status === 'pending' ? 'badge-warning' : review.status === 'approved' ? 'badge-success' : 'badge-danger'}">${review.status}</span></td></tr>
+          <tr><td><strong>Created</strong></td><td>${formatDate(review.createdAt)}</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Evolver Reasoning</h3>
+        <pre style="background: #f5f5f5; padding: 1rem; border-radius: 4px; white-space: pre-wrap;">${escapeHtml(review.evolverReasoning)}</pre>
+      </div>
+
+      <div class="card">
+        <h3>Proposed Triggers</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Pattern</th>
+              <th>Priority</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${review.proposedTriggers.map(t => `
+              <tr>
+                <td><span class="badge badge-secondary">${t.type}</span></td>
+                <td><code>${escapeHtml(t.pattern)}</code></td>
+                <td>${t.priority}</td>
+                <td><span class="badge ${t.status === 'draft' ? 'badge-warning' : 'badge-success'}">${t.status || 'live'}</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Affected Captures (${review.affectedCaptures.length})</h3>
+        ${review.affectedCaptures.length === 0 ? '<p class="text-muted">No affected captures</p>' : `
+          <table>
+            <thead>
+              <tr>
+                <th>Input</th>
+                <th>Routed</th>
+                <th>Recommendation</th>
+                <th>Suggested Route</th>
+                <th>Reasoning</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${review.affectedCaptures.map(c => `
+                <tr>
+                  <td class="text-truncate" title="${escapeHtml(c.raw)}">${escapeHtml(c.raw)}</td>
+                  <td>${formatDate(c.routedAt)}</td>
+                  <td><span class="badge ${actionBadgeClass(c.recommendation)}">${c.recommendation}</span></td>
+                  <td>${c.suggestedReroute ? escapeHtml(routeNames.get(c.suggestedReroute) || c.suggestedReroute) : '-'}</td>
+                  <td class="text-truncate" title="${escapeHtml(c.reasoning)}">${escapeHtml(c.reasoning)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+
+      ${review.status === 'pending' ? `
+        <div class="card">
+          <h3>Actions</h3>
+          <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <form method="post" action="/dashboard/reviews/${review.id}/approve?token=${token}" style="margin: 0;">
+              <button type="submit" class="btn btn-primary" onclick="return confirm('Approve these trigger changes?')">Approve Changes</button>
+            </form>
+            <form method="post" action="/dashboard/reviews/${review.id}/reject?token=${token}" style="margin: 0;">
+              <button type="submit" class="btn btn-danger" onclick="return confirm('Reject these trigger changes?')">Reject Changes</button>
+            </form>
+          </div>
+        </div>
+      ` : ''}
+
+      <p style="margin-top: 1rem;">
+        <a href="/dashboard/reviews?token=${token}">← Back to reviews</a>
+      </p>
+    `;
+
+    reply.type('text/html').send(layout('Review Detail', content, token));
+  });
+
+  // Approve review
+  server.post<{
+    Params: { reviewId: string };
+    Querystring: { token: string };
+  }>('/dashboard/reviews/:reviewId/approve', async (request, reply) => {
+    const { reviewId } = request.params;
+    const { token } = request.query;
+
+    const review = await storage.getTriggerReview(reviewId);
+    if (!review) {
+      return reply.code(404).send({ error: 'Review not found' });
+    }
+
+    // Apply trigger changes to the route
+    const route = await storage.getRoute(review.routeId);
+    if (route) {
+      route.triggers = review.proposedTriggers;
+      await storage.saveRoute(route);
+    }
+
+    // Process affected captures according to recommendations
+    for (const affected of review.affectedCaptures) {
+      const capture = await storage.getCapture(affected.captureId);
+      if (!capture) continue;
+
+      switch (affected.recommendation) {
+        case 'RE_ROUTE':
+          capture.routeFinal = null;
+          capture.routeProposed = affected.suggestedReroute || null;
+          capture.verificationState = 'pending';
+          capture.executionResult = 'pending';
+          break;
+
+        case 'LEAVE_AS_HISTORICAL':
+          capture.retiredFromTests = true;
+          capture.retiredReason = `Retired during review approval: ${affected.reasoning}`;
+          break;
+
+        case 'MARK_FOR_REVIEW':
+          capture.routingReviewQueued = true;
+          capture.suggestedReroute = affected.suggestedReroute || null;
+          break;
+      }
+
+      await storage.updateCapture(capture);
+    }
+
+    // Update review status
+    await storage.updateTriggerReviewStatus(reviewId, 'approved');
+
+    reply.redirect(`/dashboard/reviews/${reviewId}?token=${token}`);
+  });
+
+  // Reject review
+  server.post<{
+    Params: { reviewId: string };
+    Querystring: { token: string };
+  }>('/dashboard/reviews/:reviewId/reject', async (request, reply) => {
+    const { reviewId } = request.params;
+    const { token } = request.query;
+
+    const review = await storage.getTriggerReview(reviewId);
+    if (!review) {
+      return reply.code(404).send({ error: 'Review not found' });
+    }
+
+    // Just update status - don't apply any changes
+    await storage.updateTriggerReviewStatus(reviewId, 'rejected');
+
+    reply.redirect(`/dashboard/reviews/${reviewId}?token=${token}`);
+  });
 }

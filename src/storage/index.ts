@@ -1,7 +1,7 @@
 // src/storage/index.ts
 import fs from 'fs';
 import path from 'path';
-import { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens } from '../types.js';
+import { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, TriggerChangeReview } from '../types.js';
 import type { HygieneSignal } from '../hygiene/index.js';
 
 export class Storage {
@@ -19,6 +19,7 @@ export class Storage {
       path.join(this.dataDir, 'routes'),
       path.join(this.dataDir, 'executions'),
       path.join(this.dataDir, 'evolver-tests'),
+      path.join(this.dataDir, 'trigger-reviews'),
     ];
     for (const dir of dirs) {
       if (!fs.existsSync(dir)) {
@@ -449,5 +450,58 @@ export class Storage {
   async getHygieneSignalsForRoute(routeId: string): Promise<HygieneSignal[]> {
     const signals = await this.getHygieneSignals();
     return signals.filter(s => s.routeId === routeId);
+  }
+
+  // Trigger Change Reviews
+  private getTriggerReviewPath(id: string): string {
+    return path.join(this.dataDir, 'trigger-reviews', `${id}.json`);
+  }
+
+  async saveTriggerReview(review: TriggerChangeReview): Promise<void> {
+    const filePath = this.getTriggerReviewPath(review.id);
+    fs.writeFileSync(filePath, JSON.stringify(review, null, 2));
+  }
+
+  async getTriggerReview(id: string): Promise<TriggerChangeReview | null> {
+    const filePath = this.getTriggerReviewPath(id);
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return JSON.parse(content) as TriggerChangeReview;
+  }
+
+  async listTriggerReviews(status?: TriggerChangeReview['status']): Promise<TriggerChangeReview[]> {
+    const reviewsDir = path.join(this.dataDir, 'trigger-reviews');
+    if (!fs.existsSync(reviewsDir)) {
+      return [];
+    }
+    const files = fs.readdirSync(reviewsDir).filter(f => f.endsWith('.json'));
+    const reviews: TriggerChangeReview[] = [];
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(reviewsDir, file), 'utf-8');
+      const review = JSON.parse(content) as TriggerChangeReview;
+      if (!status || review.status === status) {
+        reviews.push(review);
+      }
+    }
+    return reviews;
+  }
+
+  async updateTriggerReviewStatus(id: string, status: 'approved' | 'rejected'): Promise<boolean> {
+    const review = await this.getTriggerReview(id);
+    if (!review) {
+      return false;
+    }
+    review.status = status;
+    await this.saveTriggerReview(review);
+    return true;
+  }
+
+  async deleteTriggerReview(id: string): Promise<void> {
+    const filePath = this.getTriggerReviewPath(id);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
   }
 }
