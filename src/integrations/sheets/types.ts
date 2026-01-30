@@ -22,6 +22,12 @@ export interface LookupConfig {
   fuzzyMatcher?: (candidates: string[], target: string) => Promise<number | null>;
   /** Range to search within [start, end] inclusive. Defaults to full range. */
   range?: [number, number];
+  /** If value not found, create a new row/column with this template */
+  createIfMissing?: {
+    template: unknown[];
+    /** Where to insert. 'end' appends after last non-empty. number inserts at that index. */
+    insertAt?: 'end' | number;
+  };
 }
 
 export interface LookupResult {
@@ -29,6 +35,8 @@ export interface LookupResult {
   index: number | null;
   /** The matched value (for debugging/logging) */
   matchedValue?: unknown;
+  /** True if this index was just created via createIfMissing */
+  created?: boolean;
 }
 
 export interface CreateIfMissingConfig {

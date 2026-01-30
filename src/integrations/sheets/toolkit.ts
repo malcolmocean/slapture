@@ -70,11 +70,14 @@ export async function lookup(
   sheet: SheetRef,
   config: LookupConfig
 ): Promise<LookupResult> {
-  const { axis, at, value, match = 'exact', fuzzyMatcher, range } = config;
+  const { axis, at, value, match = 'exact', fuzzyMatcher, range, createIfMissing } = config;
 
   const values = await getValues(sheet, { axis, at, range });
 
   const [startOffset] = range ?? [0, 999];
+
+  // Try to find a match
+  let foundResult: LookupResult | null = null;
 
   if (match === 'exact') {
     const stringValue = String(value);
@@ -84,26 +87,21 @@ export async function lookup(
       if (cellValue !== null && cellValue !== undefined) {
         const cellStr = String(cellValue);
         if (cellStr === stringValue || cellStr.startsWith(stringValue) || stringValue.startsWith(cellStr)) {
-          return { index: startOffset + i, matchedValue: cellValue };
+          foundResult = { index: startOffset + i, matchedValue: cellValue };
+          break;
         }
       }
     }
-    return { index: null };
-  }
-
-  if (match === 'fuzzy') {
+  } else if (match === 'fuzzy') {
     if (!fuzzyMatcher) {
       throw new Error('fuzzyMatcher callback required for fuzzy match');
     }
     const stringValues = values.map(v => String(v ?? ''));
     const matchedLocalIndex = await fuzzyMatcher(stringValues, String(value));
     if (matchedLocalIndex !== null) {
-      return { index: startOffset + matchedLocalIndex, matchedValue: values[matchedLocalIndex] };
+      foundResult = { index: startOffset + matchedLocalIndex, matchedValue: values[matchedLocalIndex] };
     }
-    return { index: null };
-  }
-
-  if (match === 'date') {
+  } else if (match === 'date') {
     const targetDate = value instanceof Date ? value : new Date(String(value));
     const targetDay = targetDate.getDate();
     const targetMonth = targetDate.getMonth();
@@ -118,7 +116,8 @@ export async function lookup(
       // Try parsing as day-of-month number (bookantt format)
       const dayNum = parseInt(cellStr, 10);
       if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 31 && dayNum === targetDay) {
-        return { index: startOffset + i, matchedValue: cellValue };
+        foundResult = { index: startOffset + i, matchedValue: cellValue };
+        break;
       }
 
       // Try parsing as full date string (gwen_memories format: "May 23, 2024")
@@ -129,12 +128,46 @@ export async function lookup(
           parsedDate.getMonth() === targetMonth &&
           parsedDate.getFullYear() === targetYear
         ) {
-          return { index: startOffset + i, matchedValue: cellValue };
+          foundResult = { index: startOffset + i, matchedValue: cellValue };
+          break;
         }
       }
     }
+  }
 
-    return { index: null };
+  // If we found a match, return it
+  if (foundResult !== null) {
+    return foundResult;
+  }
+
+  // If not found and createIfMissing specified, create the row/column
+  if (createIfMissing) {
+    const { template, insertAt = 'end' } = createIfMissing;
+
+    if (axis === 'row') {
+      // Find where to insert
+      let insertIndex: number;
+      if (insertAt === 'end') {
+        // Find last non-empty row in the range
+        const [start] = range ?? [0, 999];
+        let lastNonEmpty = start;
+        for (let i = 0; i < values.length; i++) {
+          if (values[i] !== null && values[i] !== undefined && values[i] !== '') {
+            lastNonEmpty = start + i;
+          }
+        }
+        insertIndex = lastNonEmpty + 1;
+      } else {
+        insertIndex = insertAt;
+      }
+
+      // Insert the row
+      await insertRow(sheet, insertIndex, template);
+      return { index: insertIndex, created: true };
+    } else {
+      // Column creation - not implemented yet
+      throw new Error('createIfMissing for columns not yet implemented');
+    }
   }
 
   return { index: null };
@@ -186,6 +219,60 @@ export async function appendRow(
   const rowNumber = match ? parseInt(match[1], 10) - 1 : -1;
 
   return { row: rowNumber };
+}
+
+/**
+ * Insert a row at a specific index with given values.
+ */
+export async function insertRow(
+  sheet: SheetRef,
+  rowIndex: number,
+  values: unknown[]
+): Promise<void> {
+  // Get sheet ID
+  const meta = await sheet.client.spreadsheets.get({
+    spreadsheetId: sheet.spreadsheetId,
+  });
+
+  const sheetMeta = meta.data.sheets?.find(
+    s => s.properties?.title === sheet.sheetName
+  );
+  const sheetId = sheetMeta?.properties?.sheetId;
+
+  if (sheetId === undefined) {
+    throw new Error(`Sheet "${sheet.sheetName}" not found`);
+  }
+
+  // Insert empty row
+  await sheet.client.spreadsheets.batchUpdate({
+    spreadsheetId: sheet.spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          insertDimension: {
+            range: {
+              sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1,
+            },
+            inheritFromBefore: false,
+          },
+        },
+      ],
+    },
+  });
+
+  // Write values to the new row
+  const endCol = colIndexToLetter(values.length - 1);
+  await sheet.client.spreadsheets.values.update({
+    spreadsheetId: sheet.spreadsheetId,
+    range: `'${sheet.sheetName}'!A${rowIndex + 1}:${endCol}${rowIndex + 1}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [values],
+    },
+  });
 }
 
 /**

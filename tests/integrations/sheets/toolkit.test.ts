@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { createSheetsClient } from '../../../src/integrations/sheets/auth';
-import { getValues, lookup, setCellValue, appendRow, deleteRow, getRecentActivity } from '../../../src/integrations/sheets/toolkit';
+import { getValues, lookup, setCellValue, appendRow, deleteRow, getRecentActivity, insertRow } from '../../../src/integrations/sheets/toolkit';
 import type { SheetRef } from '../../../src/integrations/sheets/types';
 
 const TEST_SPREADSHEET_ID = '1pYyHCN1osYQXoz8Qf9gjGZGP5ifhQfY_bv-c316tp4o';
@@ -263,6 +263,39 @@ describe.skipIf(!hasCredentials)('Sheets Toolkit (integration)', () => {
 
       // Clean up
       await setCellValue(sheetRef, { row: 13, col: 9, value: '' });
+    });
+  });
+
+  describe('lookup with createIfMissing', () => {
+    it('should create new row when book not found', async () => {
+      const fuzzyMatcher = async (): Promise<number | null> => null;
+
+      const result = await lookup(sheetRef, {
+        axis: 'row',
+        at: 4,
+        value: 'TEST_NEW_BOOK_DELETE_ME',
+        match: 'fuzzy',
+        fuzzyMatcher,
+        range: [2, 50],
+        createIfMissing: {
+          template: ['', '', 'b', 'n', 'TEST_NEW_BOOK_DELETE_ME', '', 'Test Author', 0],
+          insertAt: 'end',
+        },
+      });
+
+      expect(result.index).not.toBeNull();
+      expect(result.created).toBe(true);
+
+      // Verify the row was created
+      const values = await getValues(sheetRef, {
+        axis: 'col',
+        at: result.index!,
+        range: [0, 10],
+      });
+      expect(values[4]).toBe('TEST_NEW_BOOK_DELETE_ME');
+
+      // Cleanup
+      await deleteRow(sheetRef, result.index!);
     });
   });
 });
