@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { createSheetsClient } from '../../../src/integrations/sheets/auth';
-import { getValues, lookup } from '../../../src/integrations/sheets/toolkit';
+import { getValues, lookup, setCellValue } from '../../../src/integrations/sheets/toolkit';
 import type { SheetRef } from '../../../src/integrations/sheets/types';
 
 const TEST_SPREADSHEET_ID = '1pYyHCN1osYQXoz8Qf9gjGZGP5ifhQfY_bv-c316tp4o';
@@ -174,6 +174,34 @@ describe.skipIf(!hasCredentials)('Sheets Toolkit (integration)', () => {
           range: [2, 50],
         })
       ).rejects.toThrow('fuzzyMatcher callback required');
+    });
+  });
+
+  describe('setCellValue', () => {
+    it('should write value to specific cell', async () => {
+      // Write to a test cell in bookantt (row 5, column J = row 4, col 9 in 0-indexed)
+      // This is the "time read" cell for row 5, day 1
+      await setCellValue(sheetRef, {
+        row: 4,
+        col: 9,
+        value: '42',
+      });
+
+      // Read it back
+      const values = await getValues(sheetRef, {
+        axis: 'col',
+        at: 4,
+        range: [9, 9],
+      });
+
+      expect(values[0]).toBe('42');
+
+      // Clean up: clear the cell
+      await setCellValue(sheetRef, {
+        row: 4,
+        col: 9,
+        value: '',
+      });
     });
   });
 });

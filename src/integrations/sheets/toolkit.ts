@@ -1,5 +1,5 @@
 // src/integrations/sheets/toolkit.ts
-import type { SheetRef, GetValuesConfig, LookupConfig, LookupResult } from './types.js';
+import type { SheetRef, GetValuesConfig, LookupConfig, LookupResult, SetCellConfig } from './types.js';
 
 /**
  * Convert 0-based column index to A1 notation letter(s).
@@ -138,4 +138,25 @@ export async function lookup(
   }
 
   return { index: null };
+}
+
+/**
+ * Set the value of a specific cell.
+ */
+export async function setCellValue(
+  sheet: SheetRef,
+  config: SetCellConfig
+): Promise<void> {
+  const { row, col, value } = config;
+  const colLetter = colIndexToLetter(col);
+  const range = `'${sheet.sheetName}'!${colLetter}${row + 1}`;
+
+  await sheet.client.spreadsheets.values.update({
+    spreadsheetId: sheet.spreadsheetId,
+    range,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[value]],
+    },
+  });
 }

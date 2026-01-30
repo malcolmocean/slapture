@@ -46,6 +46,15 @@ export interface GetValuesConfig {
   range?: [number, number];
 }
 
+export interface SetCellConfig {
+  /** 0-indexed row number */
+  row: number;
+  /** 0-indexed column number */
+  col: number;
+  /** Value to write to the cell */
+  value: unknown;
+}
+
 export interface RecentActivityConfig {
   /** Axis where items live (e.g., 'row' for bookantt books) */
   itemAxis: Axis;
