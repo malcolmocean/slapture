@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { createSheetsClient } from '../../../src/integrations/sheets/auth';
-import { getValues, lookup, setCellValue } from '../../../src/integrations/sheets/toolkit';
+import { getValues, lookup, setCellValue, appendRow, deleteRow } from '../../../src/integrations/sheets/toolkit';
 import type { SheetRef } from '../../../src/integrations/sheets/types';
 
 const TEST_SPREADSHEET_ID = '1pYyHCN1osYQXoz8Qf9gjGZGP5ifhQfY_bv-c316tp4o';
@@ -202,6 +202,42 @@ describe.skipIf(!hasCredentials)('Sheets Toolkit (integration)', () => {
         col: 9,
         value: '',
       });
+    });
+  });
+
+  describe('appendRow', () => {
+    it('should append row to weight sheet', async () => {
+      const weightSheet: SheetRef = { ...sheetRef, sheetName: 'weight' };
+
+      // Count rows before
+      const beforeValues = await getValues(weightSheet, {
+        axis: 'row',
+        at: 0,  // column A (dates)
+        range: [0, 100],
+      });
+      const rowsBefore = beforeValues.filter(v => v !== null && v !== '').length;
+
+      // Append a test row
+      const testDate = 'TEST_DELETE_ME';
+      await appendRow(weightSheet, {
+        values: [testDate, '99.9', '220.2', 'test entry'],
+      });
+
+      // Count rows after
+      const afterValues = await getValues(weightSheet, {
+        axis: 'row',
+        at: 0,
+        range: [0, 100],
+      });
+      const rowsAfter = afterValues.filter(v => v !== null && v !== '').length;
+
+      expect(rowsAfter).toBe(rowsBefore + 1);
+
+      // Find and delete the test row (cleanup)
+      const testRowIndex = afterValues.findIndex(v => v === testDate);
+      if (testRowIndex !== -1) {
+        await deleteRow(weightSheet, testRowIndex);
+      }
     });
   });
 });

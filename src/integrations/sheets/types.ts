@@ -76,3 +76,8 @@ export interface RecentActivityResult {
   /** The label/name of this item (from a label column/row if provided) */
   label?: string;
 }
+
+export interface AppendRowConfig {
+  /** Values to append as a new row */
+  values: unknown[];
+}

@@ -1,5 +1,5 @@
 // src/integrations/sheets/toolkit.ts
-import type { SheetRef, GetValuesConfig, LookupConfig, LookupResult, SetCellConfig } from './types.js';
+import type { SheetRef, GetValuesConfig, LookupConfig, LookupResult, SetCellConfig, AppendRowConfig } from './types.js';
 
 /**
  * Convert 0-based column index to A1 notation letter(s).
@@ -157,6 +157,73 @@ export async function setCellValue(
     valueInputOption: 'USER_ENTERED',
     requestBody: {
       values: [[value]],
+    },
+  });
+}
+
+/**
+ * Append a row to the end of the sheet's data.
+ */
+export async function appendRow(
+  sheet: SheetRef,
+  config: AppendRowConfig
+): Promise<{ row: number }> {
+  const { values } = config;
+
+  const response = await sheet.client.spreadsheets.values.append({
+    spreadsheetId: sheet.spreadsheetId,
+    range: `'${sheet.sheetName}'!A:A`,
+    valueInputOption: 'USER_ENTERED',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody: {
+      values: [values],
+    },
+  });
+
+  // Parse the updated range to get the row number
+  const updatedRange = response.data.updates?.updatedRange ?? '';
+  const match = updatedRange.match(/!A(\d+)/);
+  const rowNumber = match ? parseInt(match[1], 10) - 1 : -1;
+
+  return { row: rowNumber };
+}
+
+/**
+ * Delete a row by index.
+ */
+export async function deleteRow(
+  sheet: SheetRef,
+  rowIndex: number
+): Promise<void> {
+  // First, get the sheet ID (not the spreadsheet ID)
+  const meta = await sheet.client.spreadsheets.get({
+    spreadsheetId: sheet.spreadsheetId,
+  });
+
+  const sheetMeta = meta.data.sheets?.find(
+    s => s.properties?.title === sheet.sheetName
+  );
+  const sheetId = sheetMeta?.properties?.sheetId;
+
+  if (sheetId === undefined) {
+    throw new Error(`Sheet "${sheet.sheetName}" not found`);
+  }
+
+  await sheet.client.spreadsheets.batchUpdate({
+    spreadsheetId: sheet.spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1,
+            },
+          },
+        },
+      ],
     },
   });
 }
