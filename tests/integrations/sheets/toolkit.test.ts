@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { createSheetsClient } from '../../../src/integrations/sheets/auth';
-import { getValues, lookup, setCellValue, appendRow, deleteRow } from '../../../src/integrations/sheets/toolkit';
+import { getValues, lookup, setCellValue, appendRow, deleteRow, getRecentActivity } from '../../../src/integrations/sheets/toolkit';
 import type { SheetRef } from '../../../src/integrations/sheets/types';
 
 const TEST_SPREADSHEET_ID = '1pYyHCN1osYQXoz8Qf9gjGZGP5ifhQfY_bv-c316tp4o';
@@ -238,6 +238,31 @@ describe.skipIf(!hasCredentials)('Sheets Toolkit (integration)', () => {
       if (testRowIndex !== -1) {
         await deleteRow(weightSheet, testRowIndex);
       }
+    });
+  });
+
+  describe('getRecentActivity', () => {
+    it('should find books with recent activity in bookantt', async () => {
+      // First, add some test data: write "5" to row 14 ("No Bad Parts"), column J (day 1)
+      await setCellValue(sheetRef, { row: 13, col: 9, value: '5' });
+
+      const results = await getRecentActivity(sheetRef, {
+        itemAxis: 'row',
+        dateAt: 1,          // row 2 has date headers
+        itemRange: [2, 30], // book rows
+        dateRange: [9, 40], // date columns (J onwards)
+        lookbackDays: 31,   // all of January
+        labelAt: 4,         // column E has book titles
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+
+      // "No Bad Parts" should be in the results since we just added data
+      const noBadParts = results.find(r => r.label?.includes('No Bad Parts'));
+      expect(noBadParts).toBeDefined();
+
+      // Clean up
+      await setCellValue(sheetRef, { row: 13, col: 9, value: '' });
     });
   });
 });

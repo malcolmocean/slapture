@@ -1,5 +1,5 @@
 // src/integrations/sheets/toolkit.ts
-import type { SheetRef, GetValuesConfig, LookupConfig, LookupResult, SetCellConfig, AppendRowConfig } from './types.js';
+import type { SheetRef, GetValuesConfig, LookupConfig, LookupResult, SetCellConfig, AppendRowConfig, RecentActivityConfig, RecentActivityResult } from './types.js';
 
 /**
  * Convert 0-based column index to A1 notation letter(s).
@@ -226,4 +226,120 @@ export async function deleteRow(
       ],
     },
   });
+}
+
+/**
+ * Find items (rows or columns) with recent activity.
+ *
+ * Scans the item range and for each item, checks the date range for non-empty values.
+ * Returns items that have activity, sorted by most recent first.
+ */
+export async function getRecentActivity(
+  sheet: SheetRef,
+  config: RecentActivityConfig
+): Promise<RecentActivityResult[]> {
+  const { itemAxis, dateAt, itemRange, dateRange, lookbackDays, labelAt } = config;
+  const [itemStart, itemEnd] = itemRange;
+  const [dateStart, dateEnd] = dateRange;
+
+  // Get date headers to know what dates we're looking at
+  const dateHeaders = await getValues(sheet, {
+    axis: itemAxis === 'row' ? 'col' : 'row',
+    at: dateAt,
+    range: dateRange,
+  });
+
+  // Get labels if requested
+  let labels: unknown[] = [];
+  if (labelAt !== undefined) {
+    labels = await getValues(sheet, {
+      axis: itemAxis,
+      at: labelAt,
+      range: itemRange,
+    });
+  }
+
+  // Fetch all data in one batch call (2D range)
+  // For itemAxis='row': rows are items, columns are dates
+  // For itemAxis='col': columns are items, rows are dates
+  const startCol = itemAxis === 'row' ? colIndexToLetter(dateStart) : colIndexToLetter(itemStart);
+  const endCol = itemAxis === 'row' ? colIndexToLetter(dateEnd) : colIndexToLetter(itemEnd);
+  const startRow = itemAxis === 'row' ? itemStart + 1 : dateStart + 1;
+  const endRow = itemAxis === 'row' ? itemEnd + 1 : dateEnd + 1;
+
+  const rangeNotation = `'${sheet.sheetName}'!${startCol}${startRow}:${endCol}${endRow}`;
+
+  const response = await sheet.client.spreadsheets.values.get({
+    spreadsheetId: sheet.spreadsheetId,
+    range: rangeNotation,
+  });
+
+  const allValues = response.data.values ?? [];
+
+  const results: RecentActivityResult[] = [];
+  const today = new Date();
+  const cutoffDate = new Date(today);
+  cutoffDate.setDate(cutoffDate.getDate() - lookbackDays);
+
+  // Process each item
+  const itemCount = itemEnd - itemStart + 1;
+  for (let itemOffset = 0; itemOffset < itemCount; itemOffset++) {
+    const itemIdx = itemStart + itemOffset;
+
+    // Get values for this item from the batch result
+    let values: unknown[];
+    if (itemAxis === 'row') {
+      // Each row in allValues is an item, each column is a date
+      values = allValues[itemOffset] ?? [];
+    } else {
+      // Each column in allValues is an item - transpose
+      values = allValues.map(row => row[itemOffset] ?? null);
+    }
+
+    let lastActiveIndex: number | null = null;
+    let lastActiveDate: Date | null = null;
+
+    // Scan backwards to find most recent activity
+    for (let i = values.length - 1; i >= 0; i--) {
+      const val = values[i];
+      if (val !== null && val !== undefined && val !== '' && val !== '0') {
+        // Parse the date header to get actual date
+        const dateHeader = dateHeaders[i];
+        const dayNum = parseInt(String(dateHeader), 10);
+
+        if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 31) {
+          // Assume current month/year for day-of-month format
+          // This is a simplification; real implementation might need month context
+          const date = new Date(today.getFullYear(), today.getMonth(), dayNum);
+          if (date > today) {
+            // Day is in the future this month, must be last month
+            date.setMonth(date.getMonth() - 1);
+          }
+
+          if (date >= cutoffDate) {
+            lastActiveIndex = dateStart + i;
+            lastActiveDate = date;
+            break;
+          }
+        }
+      }
+    }
+
+    if (lastActiveDate !== null) {
+      results.push({
+        index: itemIdx,
+        lastActiveDate,
+        lastActiveIndex,
+        label: labels[itemOffset] !== undefined ? String(labels[itemOffset]) : undefined,
+      });
+    }
+  }
+
+  // Sort by most recent first
+  results.sort((a, b) => {
+    if (!a.lastActiveDate || !b.lastActiveDate) return 0;
+    return b.lastActiveDate.getTime() - a.lastActiveDate.getTime();
+  });
+
+  return results;
 }

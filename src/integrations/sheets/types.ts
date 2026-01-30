@@ -66,13 +66,17 @@ export interface RecentActivityConfig {
   dateRange: [number, number];
   /** How many days back to look */
   lookbackDays: number;
+  /** Optional: index of label row/column for items */
+  labelAt?: number;
 }
 
 export interface RecentActivityResult {
   /** Item index (row or column depending on itemAxis) */
   index: number;
   /** Most recent date with activity */
-  lastActiveDate: Date;
+  lastActiveDate: Date | null;
+  /** Index of the most recent active date cell */
+  lastActiveIndex: number | null;
   /** The label/name of this item (from a label column/row if provided) */
   label?: string;
 }
