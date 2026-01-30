@@ -101,4 +101,40 @@ describe.skipIf(!hasCredentials)('Sheets Toolkit (integration)', () => {
       expect(result.index).toBeNull();
     });
   });
+
+  describe('lookup with date match', () => {
+    it('should find column by day-of-month number', async () => {
+      // In bookantt, row 2 has day numbers: 1, 2, 3, etc.
+      // Find column for day 15
+      const result = await lookup(sheetRef, {
+        axis: 'col',
+        at: 1,  // row 2 (0-indexed)
+        value: new Date(2025, 0, 15), // Jan 15, 2025
+        match: 'date',
+        range: [9, 40],
+      });
+
+      expect(result.index).not.toBeNull();
+      // Day 15 should be at column X (J=9, so 9+14=23)
+      expect(result.index).toBe(23);
+    });
+
+    it('should find row by date string in gwen_memories', async () => {
+      const gwenSheet: SheetRef = { ...sheetRef, sheetName: 'gwen_memories' };
+
+      // gwen_memories has dates like "May 23, 2025" in column A
+      // Find the row for May 24, 2025
+      const result = await lookup(gwenSheet, {
+        axis: 'row',
+        at: 0,  // column A
+        value: new Date(2025, 4, 24), // May 24, 2025
+        match: 'date',
+        range: [2, 30],
+      });
+
+      expect(result.index).not.toBeNull();
+      // May 24, 2025 is at row 3 (0-indexed)
+      expect(result.index).toBe(3);
+    });
+  });
 });

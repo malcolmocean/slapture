@@ -104,8 +104,37 @@ export async function lookup(
   }
 
   if (match === 'date') {
-    // TODO: Implement in Task 5
-    throw new Error('Date matching not yet implemented');
+    const targetDate = value instanceof Date ? value : new Date(String(value));
+    const targetDay = targetDate.getDate();
+    const targetMonth = targetDate.getMonth();
+    const targetYear = targetDate.getFullYear();
+
+    for (let i = 0; i < values.length; i++) {
+      const cellValue = values[i];
+      if (cellValue === null || cellValue === undefined || cellValue === '') continue;
+
+      const cellStr = String(cellValue).trim();
+
+      // Try parsing as day-of-month number (bookantt format)
+      const dayNum = parseInt(cellStr, 10);
+      if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 31 && dayNum === targetDay) {
+        return { index: startOffset + i, matchedValue: cellValue };
+      }
+
+      // Try parsing as full date string (gwen_memories format: "May 23, 2024")
+      const parsedDate = new Date(cellStr);
+      if (!isNaN(parsedDate.getTime())) {
+        if (
+          parsedDate.getDate() === targetDay &&
+          parsedDate.getMonth() === targetMonth &&
+          parsedDate.getFullYear() === targetYear
+        ) {
+          return { index: startOffset + i, matchedValue: cellValue };
+        }
+      }
+    }
+
+    return { index: null };
   }
 
   return { index: null };
