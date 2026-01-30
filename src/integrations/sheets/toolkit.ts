@@ -1,5 +1,5 @@
 // src/integrations/sheets/toolkit.ts
-import type { SheetRef, GetValuesConfig } from './types.js';
+import type { SheetRef, GetValuesConfig, LookupConfig, LookupResult } from './types.js';
 
 /**
  * Convert 0-based column index to A1 notation letter(s).
@@ -58,4 +58,55 @@ export async function getValues(
   } else {
     return values[0] ?? [];
   }
+}
+
+/**
+ * Find an index along an axis by matching a value.
+ *
+ * - axis='row': Find which row contains `value` in column `at`
+ * - axis='col': Find which column contains `value` in row `at`
+ */
+export async function lookup(
+  sheet: SheetRef,
+  config: LookupConfig
+): Promise<LookupResult> {
+  const { axis, at, value, match = 'exact', fuzzyMatcher, range } = config;
+
+  const values = await getValues(sheet, { axis, at, range });
+
+  const [startOffset] = range ?? [0, 999];
+
+  if (match === 'exact') {
+    const stringValue = String(value);
+    for (let i = 0; i < values.length; i++) {
+      const cellValue = values[i];
+      // Check both exact match and "starts with" for truncated values
+      if (cellValue !== null && cellValue !== undefined) {
+        const cellStr = String(cellValue);
+        if (cellStr === stringValue || cellStr.startsWith(stringValue) || stringValue.startsWith(cellStr)) {
+          return { index: startOffset + i, matchedValue: cellValue };
+        }
+      }
+    }
+    return { index: null };
+  }
+
+  if (match === 'fuzzy') {
+    if (!fuzzyMatcher) {
+      throw new Error('fuzzyMatcher callback required for fuzzy match');
+    }
+    const stringValues = values.map(v => String(v ?? ''));
+    const matchedLocalIndex = await fuzzyMatcher(stringValues, String(value));
+    if (matchedLocalIndex !== null) {
+      return { index: startOffset + matchedLocalIndex, matchedValue: values[matchedLocalIndex] };
+    }
+    return { index: null };
+  }
+
+  if (match === 'date') {
+    // TODO: Implement in Task 5
+    throw new Error('Date matching not yet implemented');
+  }
+
+  return { index: null };
 }

@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { createSheetsClient } from '../../../src/integrations/sheets/auth';
-import { getValues } from '../../../src/integrations/sheets/toolkit';
+import { getValues, lookup } from '../../../src/integrations/sheets/toolkit';
 import type { SheetRef } from '../../../src/integrations/sheets/types';
 
 const TEST_SPREADSHEET_ID = '1pYyHCN1osYQXoz8Qf9gjGZGP5ifhQfY_bv-c316tp4o';
@@ -55,6 +55,50 @@ describe.skipIf(!hasCredentials)('Sheets Toolkit (integration)', () => {
       // Should have day numbers: 1, 2, 3, etc.
       expect(values[0]).toBe('1');
       expect(values[1]).toBe('2');
+    });
+  });
+
+  describe('lookup', () => {
+    it('should find row by exact match in column', async () => {
+      // Find "No Bad Parts" in column E (title column)
+      const result = await lookup(sheetRef, {
+        axis: 'row',
+        at: 4,  // column E
+        value: 'No Bad Parts',
+        match: 'exact',
+        range: [2, 50],
+      });
+
+      expect(result.index).not.toBeNull();
+      // "No Bad Parts" is row 14 (0-indexed = 13)
+      expect(result.index).toBe(13);
+    });
+
+    it('should find column by exact match in row', async () => {
+      // Find day "5" in row 2 (date header row)
+      const result = await lookup(sheetRef, {
+        axis: 'col',
+        at: 1,  // row 2
+        value: '5',
+        match: 'exact',
+        range: [9, 40],  // date columns start at J
+      });
+
+      expect(result.index).not.toBeNull();
+      // Day 5 should be at column N (0-indexed = 13)
+      expect(result.index).toBe(13);
+    });
+
+    it('should return null when not found', async () => {
+      const result = await lookup(sheetRef, {
+        axis: 'row',
+        at: 4,
+        value: 'Nonexistent Book Title XYZ',
+        match: 'exact',
+        range: [2, 50],
+      });
+
+      expect(result.index).toBeNull();
     });
   });
 });
