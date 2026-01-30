@@ -1,5 +1,15 @@
 # Tiered Regression Protection for Trigger Evolution
 
+## Implementation Progress
+
+- [x] **Schema changes** - Added `routingReviewQueued`, `suggestedReroute` to Capture; created `TriggerChangeReview` and `FreedCaptureAction` types in `src/types.ts`
+- [x] **Tiered validation** - New `validateChangesTiered()` in `src/mastermind/evolver.ts` categorizes captures by verification state
+- [x] **Evolver prompt** - Updated `buildPrompt()` to include soft-protected and freed captures with relative dates
+- [x] **Response parsing** - Updated `parseResponse()` to handle `overrideJustifications` and `freedCaptureActions`
+- [ ] **Review queue storage** - `src/storage/trigger-reviews.ts`
+- [ ] **Pipeline integration** - Execute freed capture actions after evolution
+- [ ] **Dashboard UI** - Review queue for pending trigger changes
+
 ## Problem
 
 The evolver's regression check treats all historically-routed captures as "correct" and blocks trigger changes that would cause them to no longer match. This prevents legitimate trigger evolution when:

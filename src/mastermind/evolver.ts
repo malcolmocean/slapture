@@ -40,6 +40,42 @@ export interface EvolverContext {
     errors: string[];
     otherRoutesTriggers?: Array<{ routeName: string; triggers: RouteTrigger[] }>;
   };
+  /** Tiered validation results - only present after first validation attempt */
+  tieredValidation?: TieredValidationResult;
+}
+
+/**
+ * Format a relative date string like "9h ago" or "14d ago"
+ */
+function formatRelativeDate(isoDate: string): string {
+  const date = new Date(isoDate);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 60) {
+    return `${diffMins}m ago`;
+  } else if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  } else {
+    return `${diffDays}d ago`;
+  }
+}
+
+/**
+ * Result of tiered validation - categorizes captures by verification state.
+ */
+export interface TieredValidationResult {
+  /** Captures that are human_verified and would no longer match - blocks evolution */
+  hardBlocked: Capture[];
+  /** Captures that are ai_certain and would no longer match - can be overridden with justification */
+  softBlocked: Capture[];
+  /** Captures that are unverified and would no longer match - freely re-routable */
+  freedCaptures: Capture[];
+  /** Collision errors - captures from other routes that would match */
+  collisions: string[];
 }
 
 export class Evolver {
@@ -134,6 +170,78 @@ ${validationFailure.otherRoutesTriggers.map(r =>
       }
     }
 
+    // Add tiered validation context if present
+    if (context.tieredValidation) {
+      const { softBlocked, freedCaptures, collisions } = context.tieredValidation;
+
+      // Soft-blocked captures (ai_certain) - can be overridden with justification
+      if (softBlocked.length > 0) {
+        prompt += `
+
+## Soft-Protected Captures (AI-Verified)
+These captures were routed here with AI certainty but no human verification.
+You MAY override them if you believe the original routing was incorrect.
+For each override, provide justification in the "overrideJustifications" field.
+
+${softBlocked.map((c, i) =>
+  `[${i + 1}] "${c.raw}"
+    routed: ${c.routeFinal ? c.timestamp.split('T')[0] : 'unknown'} (${formatRelativeDate(c.timestamp)}) | verification: ${c.verificationState}`
+).join('\n\n')}`;
+      }
+
+      // Freed captures - these no longer match and need action
+      if (freedCaptures.length > 0) {
+        prompt += `
+
+## Freed Captures (No Longer Match Your Proposed Triggers)
+These captures were routed here but would no longer match if your triggers are applied.
+Since they weren't verified, they can be re-routed. For each, specify an action in "freedCaptureActions".
+
+${freedCaptures.map((c, i) =>
+  `[${i + 1}] "${c.raw}"
+    routed: ${c.timestamp.split('T')[0]} (${formatRelativeDate(c.timestamp)}) | verification: ${c.verificationState}`
+).join('\n\n')}
+
+For each freed capture, respond with one of:
+- "RE_ROUTE": Capture should be re-routed through the pipeline (specify suggestedRoute if known)
+- "MARK_FOR_REVIEW": Flag for human review in dashboard
+- "LEAVE_AS_HISTORICAL": Keep as-is but exclude from future regression checks`;
+      }
+
+      // Collision errors
+      if (collisions.length > 0) {
+        prompt += `
+
+## COLLISION ERRORS
+Your proposed triggers would match captures from other routes:
+${collisions.map(c => `- ${c}`).join('\n')}
+
+You must modify your triggers to avoid these collisions.`;
+      }
+
+      // Update response format if we have tiered context
+      if (softBlocked.length > 0 || freedCaptures.length > 0) {
+        prompt += `
+
+## Extended Response Format
+
+When soft-blocked or freed captures are present, include these fields:
+
+{
+  "triggers": [...],
+  "reasoning": "...",
+  "overrideJustifications": {
+    "1": "Reason why capture 1 was incorrectly routed here",
+    "2": "Reason why capture 2 was incorrectly routed here"
+  },
+  "freedCaptureActions": {
+    "1": { "action": "RE_ROUTE", "suggestedRoute": "fitness_log", "reasoning": "Contains pushups data" },
+    "2": { "action": "LEAVE_AS_HISTORICAL", "reasoning": "Old format, no longer relevant" }
+  }
+}`;
+      }
+    }
+
     return prompt;
   }
 
@@ -204,6 +312,8 @@ ${validationFailure.otherRoutesTriggers.map(r =>
           triggers: parsed.triggers,
           transform: parsed.transform,
           reasoning: parsed.reasoning || 'Evolved by evolver',
+          overrideJustifications: parsed.overrideJustifications,
+          freedCaptureActions: parsed.freedCaptureActions,
         };
       }
 
@@ -220,7 +330,64 @@ ${validationFailure.otherRoutesTriggers.map(r =>
   }
 
   /**
-   * Validate proposed changes by replaying all captures
+   * Validate proposed changes with tiered protection based on verificationState.
+   *
+   * Protection tiers:
+   * - human_verified: Hard block - requires human review queue
+   * - ai_certain: Soft block - evolver can override with justification
+   * - ai_uncertain/pending/failed: No protection - freely re-routable
+   * - retiredFromTests: Excluded entirely from checks
+   */
+  validateChangesTiered(
+    proposedTriggers: RouteTrigger[],
+    routeId: string,
+    allCaptures: Capture[],
+    allRoutes: Route[]
+  ): TieredValidationResult {
+    const hardBlocked: Capture[] = [];
+    const softBlocked: Capture[] = [];
+    const freedCaptures: Capture[] = [];
+    const collisions: string[] = [];
+
+    // Get this route's captures, excluding retired ones
+    const thisRouteCaptures = allCaptures.filter(
+      c => c.routeFinal === routeId && !c.retiredFromTests
+    );
+
+    // Categorize captures that no longer match by verification state
+    for (const capture of thisRouteCaptures) {
+      if (!this.matchesTriggers(capture.raw, proposedTriggers)) {
+        // Capture no longer matches - categorize by verification state
+        if (capture.verificationState === 'human_verified') {
+          hardBlocked.push(capture);
+        } else if (capture.verificationState === 'ai_certain') {
+          softBlocked.push(capture);
+        } else {
+          // ai_uncertain, pending, failed, or undefined
+          freedCaptures.push(capture);
+        }
+      }
+    }
+
+    // Check for collisions with other routes' captures (regardless of verification state)
+    const otherCaptures = allCaptures.filter(
+      c => c.routeFinal && c.routeFinal !== routeId && !c.retiredFromTests
+    );
+    for (const capture of otherCaptures) {
+      if (this.matchesTriggers(capture.raw, proposedTriggers)) {
+        const otherRoute = allRoutes.find(r => r.id === capture.routeFinal);
+        collisions.push(
+          `Collision: "${capture.raw}" (belongs to ${otherRoute?.name || capture.routeFinal}) would match this route`
+        );
+      }
+    }
+
+    return { hardBlocked, softBlocked, freedCaptures, collisions };
+  }
+
+  /**
+   * Validate proposed changes by replaying all captures.
+   * Legacy API - uses tiered validation internally but returns simple pass/fail.
    */
   validateChanges(
     proposedTriggers: RouteTrigger[],
@@ -228,24 +395,19 @@ ${validationFailure.otherRoutesTriggers.map(r =>
     allCaptures: Capture[],
     allRoutes: Route[]
   ): { passed: boolean; errors: string[] } {
+    const tiered = this.validateChangesTiered(proposedTriggers, routeId, allCaptures, allRoutes);
     const errors: string[] = [];
 
-    // Test 1: This route's captures still match
-    const thisRouteCaptures = allCaptures.filter(c => c.routeFinal === routeId);
-    for (const capture of thisRouteCaptures) {
-      if (!this.matchesTriggers(capture.raw, proposedTriggers)) {
-        errors.push(`Regression: "${capture.raw}" no longer matches this route`);
-      }
+    // For legacy API: hard and soft blocked both count as regressions
+    for (const capture of tiered.hardBlocked) {
+      errors.push(`Regression: "${capture.raw}" no longer matches this route`);
     }
+    for (const capture of tiered.softBlocked) {
+      errors.push(`Regression: "${capture.raw}" no longer matches this route`);
+    }
+    // freedCaptures are NOT regressions in legacy API
 
-    // Test 2: Other routes' captures don't match
-    const otherCaptures = allCaptures.filter(c => c.routeFinal && c.routeFinal !== routeId);
-    for (const capture of otherCaptures) {
-      if (this.matchesTriggers(capture.raw, proposedTriggers)) {
-        const otherRoute = allRoutes.find(r => r.id === capture.routeFinal);
-        errors.push(`Collision: "${capture.raw}" (belongs to ${otherRoute?.name || capture.routeFinal}) would match this route`);
-      }
-    }
+    errors.push(...tiered.collisions);
 
     return {
       passed: errors.length === 0,
