@@ -34,6 +34,12 @@ export const INTEGRATIONS: Integration[] = [
     purpose: 'Save notes about integrations and destinations',
     authType: 'none',
   },
+  {
+    id: 'sheets',
+    name: 'Google Sheets',
+    purpose: 'Capture data to Google Sheets - supports cell updates, row appends, and 2D lookups with fuzzy matching',
+    authType: 'oauth',
+  },
 ];
 
 /**
