@@ -16,6 +16,113 @@ export function colIndexToLetter(index: number): string {
 }
 
 /**
+ * Google Sheets serial date epoch: December 30, 1899
+ * Serial number = days since that date
+ *
+ * Valid range: ~25569 (Jan 1, 1970) to ~73050 (Dec 31, 2099)
+ * We use a slightly wider range to catch dates from 1950-2100
+ */
+const SHEETS_EPOCH_OFFSET = 25569; // Days between Dec 30, 1899 and Jan 1, 1970
+const MS_PER_DAY = 86400 * 1000;
+const MIN_VALID_SERIAL = 18264;  // ~1950
+const MAX_VALID_SERIAL = 73415;  // ~2100
+
+/**
+ * Convert a Google Sheets serial date number to a JavaScript Date.
+ * Returns null if the number is outside the valid date range.
+ */
+export function sheetsSerialToDate(serial: number): Date | null {
+  if (serial < MIN_VALID_SERIAL || serial > MAX_VALID_SERIAL) {
+    return null;
+  }
+  // Convert: serial is days since Dec 30, 1899
+  // JS Date uses ms since Jan 1, 1970
+  const msFromUnixEpoch = (serial - SHEETS_EPOCH_OFFSET) * MS_PER_DAY;
+  return new Date(msFromUnixEpoch);
+}
+
+/**
+ * Check if a value looks like a Google Sheets serial date.
+ * NOTE: This is a heuristic fallback. Prefer using getCellFormatTypes() to check
+ * if a cell is actually formatted as a date.
+ */
+export function isSheetSerialDate(value: unknown): value is number {
+  return typeof value === 'number' && value >= MIN_VALID_SERIAL && value <= MAX_VALID_SERIAL;
+}
+
+/** Cell format types returned by getCellFormatTypes */
+export type CellFormatType = 'DATE' | 'DATE_TIME' | 'TIME' | 'NUMBER' | 'TEXT' | 'CURRENCY' | 'PERCENT' | 'SCIENTIFIC' | 'OTHER';
+
+/**
+ * Get the format types for cells in a range.
+ * Returns an array of format types corresponding to the requested axis.
+ *
+ * This is useful for determining if numeric values are actually dates
+ * (which are stored as serial numbers but formatted as dates).
+ */
+export async function getCellFormatTypes(
+  sheet: SheetRef,
+  config: GetValuesConfig
+): Promise<CellFormatType[]> {
+  const { axis, at, range } = config;
+  const [start, end] = range ?? [0, 999];
+
+  let rangeNotation: string;
+
+  if (axis === 'row') {
+    const col = colIndexToLetter(at);
+    rangeNotation = `'${sheet.sheetName}'!${col}${start + 1}:${col}${end + 1}`;
+  } else {
+    const startCol = colIndexToLetter(start);
+    const endCol = colIndexToLetter(end);
+    rangeNotation = `'${sheet.sheetName}'!${startCol}${at + 1}:${endCol}${at + 1}`;
+  }
+
+  const response = await sheet.client.spreadsheets.get({
+    spreadsheetId: sheet.spreadsheetId,
+    ranges: [rangeNotation],
+    includeGridData: true,
+  });
+
+  const sheetData = response.data.sheets?.[0]?.data?.[0];
+  if (!sheetData?.rowData) {
+    return [];
+  }
+
+  const formatTypes: CellFormatType[] = [];
+
+  if (axis === 'row') {
+    // Each row has one cell
+    for (const row of sheetData.rowData) {
+      const cell = row.values?.[0];
+      formatTypes.push(parseCellFormatType(cell?.effectiveFormat?.numberFormat?.type));
+    }
+  } else {
+    // Single row with multiple cells
+    const row = sheetData.rowData[0];
+    for (const cell of row?.values ?? []) {
+      formatTypes.push(parseCellFormatType(cell?.effectiveFormat?.numberFormat?.type));
+    }
+  }
+
+  return formatTypes;
+}
+
+function parseCellFormatType(type: string | null | undefined): CellFormatType {
+  switch (type) {
+    case 'DATE': return 'DATE';
+    case 'DATE_TIME': return 'DATE_TIME';
+    case 'TIME': return 'TIME';
+    case 'NUMBER': return 'NUMBER';
+    case 'TEXT': return 'TEXT';
+    case 'CURRENCY': return 'CURRENCY';
+    case 'PERCENT': return 'PERCENT';
+    case 'SCIENTIFIC': return 'SCIENTIFIC';
+    default: return 'OTHER';
+  }
+}
+
+/**
  * Get values along an axis.
  *
  * - axis='row': Get values from multiple rows in a single column (at=column index)
@@ -44,6 +151,7 @@ export async function getValues(
   const response = await sheet.client.spreadsheets.values.get({
     spreadsheetId: sheet.spreadsheetId,
     range: rangeNotation,
+    valueRenderOption: 'UNFORMATTED_VALUE',
   });
 
   const values = response.data.values;
@@ -107,13 +215,32 @@ export async function lookup(
     const targetMonth = targetDate.getMonth();
     const targetYear = targetDate.getFullYear();
 
+    // Fetch cell format types to properly detect date-formatted cells
+    const formatTypes = await getCellFormatTypes(sheet, { axis, at, range });
+
     for (let i = 0; i < values.length; i++) {
       const cellValue = values[i];
       if (cellValue === null || cellValue === undefined || cellValue === '') continue;
 
+      const formatType = formatTypes[i];
+      const isDateFormatted = formatType === 'DATE' || formatType === 'DATE_TIME';
+
+      // If cell is formatted as a date and value is a number, treat as serial date
+      if (isDateFormatted && typeof cellValue === 'number') {
+        const cellDate = sheetsSerialToDate(cellValue);
+        if (cellDate &&
+            cellDate.getUTCDate() === targetDay &&
+            cellDate.getUTCMonth() === targetMonth &&
+            cellDate.getUTCFullYear() === targetYear) {
+          foundResult = { index: startOffset + i, matchedValue: cellValue };
+          break;
+        }
+        continue; // It's a date-formatted cell, don't try other parsing methods
+      }
+
       const cellStr = String(cellValue).trim();
 
-      // Try parsing as day-of-month number (bookantt format)
+      // Try parsing as day-of-month number (legacy: small integers 1-31)
       const dayNum = parseInt(cellStr, 10);
       if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 31 && dayNum === targetDay) {
         foundResult = { index: startOffset + i, matchedValue: cellValue };
@@ -330,11 +457,13 @@ export async function getRecentActivity(
   const [dateStart, dateEnd] = dateRange;
 
   // Get date headers to know what dates we're looking at
-  const dateHeaders = await getValues(sheet, {
+  const dateHeadersConfig: GetValuesConfig = {
     axis: itemAxis === 'row' ? 'col' : 'row',
     at: dateAt,
     range: dateRange,
-  });
+  };
+  const dateHeaders = await getValues(sheet, dateHeadersConfig);
+  const dateHeaderFormats = await getCellFormatTypes(sheet, dateHeadersConfig);
 
   // Get labels if requested
   let labels: unknown[] = [];
@@ -359,6 +488,7 @@ export async function getRecentActivity(
   const response = await sheet.client.spreadsheets.values.get({
     spreadsheetId: sheet.spreadsheetId,
     range: rangeNotation,
+    valueRenderOption: 'UNFORMATTED_VALUE',
   });
 
   const allValues = response.data.values ?? [];
@@ -392,22 +522,31 @@ export async function getRecentActivity(
       if (val !== null && val !== undefined && val !== '' && val !== '0') {
         // Parse the date header to get actual date
         const dateHeader = dateHeaders[i];
-        const dayNum = parseInt(String(dateHeader), 10);
+        const formatType = dateHeaderFormats[i];
+        const isDateFormatted = formatType === 'DATE' || formatType === 'DATE_TIME';
 
-        if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 31) {
-          // Assume current month/year for day-of-month format
-          // This is a simplification; real implementation might need month context
-          const date = new Date(today.getFullYear(), today.getMonth(), dayNum);
-          if (date > today) {
-            // Day is in the future this month, must be last month
-            date.setMonth(date.getMonth() - 1);
-          }
+        let date: Date | null = null;
 
-          if (date >= cutoffDate) {
-            lastActiveIndex = dateStart + i;
-            lastActiveDate = date;
-            break;
+        // If cell is formatted as a date and value is a number, treat as serial date
+        if (isDateFormatted && typeof dateHeader === 'number') {
+          date = sheetsSerialToDate(dateHeader);
+        } else {
+          // Fallback: try parsing as day-of-month number (legacy format)
+          const dayNum = parseInt(String(dateHeader), 10);
+          if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 31) {
+            // Assume current month/year for day-of-month format
+            date = new Date(today.getFullYear(), today.getMonth(), dayNum);
+            if (date > today) {
+              // Day is in the future this month, must be last month
+              date.setMonth(date.getMonth() - 1);
+            }
           }
+        }
+
+        if (date && date >= cutoffDate) {
+          lastActiveIndex = dateStart + i;
+          lastActiveDate = date;
+          break;
         }
       }
     }

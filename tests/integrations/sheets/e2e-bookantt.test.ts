@@ -83,7 +83,7 @@ describe.skipIf(!hasCredentials)('E2E: Bookantt', () => {
       at: bookRow,
       range: [dateCol, dateCol],
     });
-    expect(verifyValues[0]).toBe(testMinutes);
+    expect(verifyValues[0]).toBe(15); // Returns number with UNFORMATTED_VALUE
 
     // Cleanup
     await setCellValue(sheet, {

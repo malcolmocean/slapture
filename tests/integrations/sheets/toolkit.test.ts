@@ -2,10 +2,41 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { createSheetsClient } from '../../../src/integrations/sheets/auth';
-import { getValues, lookup, setCellValue, appendRow, deleteRow, getRecentActivity, insertRow } from '../../../src/integrations/sheets/toolkit';
+import { getValues, lookup, setCellValue, appendRow, deleteRow, getRecentActivity, insertRow, sheetsSerialToDate, getCellFormatTypes } from '../../../src/integrations/sheets/toolkit';
 import type { SheetRef } from '../../../src/integrations/sheets/types';
 
 const TEST_SPREADSHEET_ID = '1pYyHCN1osYQXoz8Qf9gjGZGP5ifhQfY_bv-c316tp4o';
+
+// Unit tests that don't require credentials
+describe('sheetsSerialToDate', () => {
+  it('converts Jan 1, 2025 serial to correct date (UTC)', () => {
+    const date = sheetsSerialToDate(45658)!;
+    // Serial dates are UTC-based
+    expect(date.getUTCFullYear()).toBe(2025);
+    expect(date.getUTCMonth()).toBe(0); // January
+    expect(date.getUTCDate()).toBe(1);
+  });
+
+  it('converts Jan 15, 2025 serial to correct date (UTC)', () => {
+    const date = sheetsSerialToDate(45672)!;
+    expect(date.getUTCFullYear()).toBe(2025);
+    expect(date.getUTCMonth()).toBe(0);
+    expect(date.getUTCDate()).toBe(15);
+  });
+
+  it('converts Feb 1, 2025 serial to correct date (UTC)', () => {
+    const date = sheetsSerialToDate(45689)!;
+    expect(date.getUTCFullYear()).toBe(2025);
+    expect(date.getUTCMonth()).toBe(1); // February
+    expect(date.getUTCDate()).toBe(1);
+  });
+
+  it('returns null for non-date-range numbers', () => {
+    // Numbers too small or too large to be valid sheet dates
+    expect(sheetsSerialToDate(100)).toBeNull();
+    expect(sheetsSerialToDate(-1)).toBeNull();
+  });
+});
 
 // Skip if no credentials (CI environment)
 const hasCredentials = existsSync('./secrets/google-secrets.json') && existsSync('./secrets/google-tokens.json');
@@ -52,9 +83,57 @@ describe.skipIf(!hasCredentials)('Sheets Toolkit (integration)', () => {
       });
 
       expect(values.length).toBeGreaterThan(0);
-      // Should have day numbers: 1, 2, 3, etc.
-      expect(values[0]).toBe('1');
-      expect(values[1]).toBe('2');
+      // Values are now unformatted serial dates (numbers), not formatted strings
+      // Jan 1, 2025 = 45658, Jan 2 = 45659, etc.
+      expect(typeof values[0]).toBe('number');
+      expect(values[0]).toBe(45658); // Jan 1, 2025
+      expect(values[1]).toBe(45659); // Jan 2, 2025
+    });
+
+    it('should return unformatted values (date serials) by default', async () => {
+      // Row 2 columns J onwards contain actual Date values formatted to show day-of-month
+      // The underlying values are Google Sheets serial dates (days since Dec 30, 1899)
+      const values = await getValues(sheetRef, {
+        axis: 'col',
+        at: 1,        // row 2 (0-indexed = 1)
+        range: [9, 11], // columns J-L (first 3 date columns)
+      });
+
+      expect(values.length).toBe(3);
+      // Should be serial date numbers, not formatted strings
+      // Jan 1, 2025 = 45658, Jan 2 = 45659, Jan 3 = 45660
+      expect(typeof values[0]).toBe('number');
+      expect(values[0]).toBe(45658); // Jan 1, 2025
+      expect(values[1]).toBe(45659); // Jan 2, 2025
+      expect(values[2]).toBe(45660); // Jan 3, 2025
+    });
+  });
+
+  describe('getCellFormatTypes', () => {
+    it('should detect DATE format for date columns', async () => {
+      const formats = await getCellFormatTypes(sheetRef, {
+        axis: 'col',
+        at: 1,        // row 2 (date header)
+        range: [9, 11], // columns J-L
+      });
+
+      expect(formats.length).toBe(3);
+      expect(formats[0]).toBe('DATE');
+      expect(formats[1]).toBe('DATE');
+      expect(formats[2]).toBe('DATE');
+    });
+
+    it('should detect non-DATE format for text/number columns', async () => {
+      // Column E (book titles) should not be DATE
+      const formats = await getCellFormatTypes(sheetRef, {
+        axis: 'row',
+        at: 4,        // column E
+        range: [2, 5], // a few book rows
+      });
+
+      expect(formats.length).toBeGreaterThan(0);
+      // Text columns typically have no explicit numberFormat, so they're 'OTHER'
+      expect(formats.every(f => f !== 'DATE' && f !== 'DATE_TIME')).toBe(true);
     });
   });
 
@@ -74,18 +153,19 @@ describe.skipIf(!hasCredentials)('Sheets Toolkit (integration)', () => {
       expect(result.index).toBe(13);
     });
 
-    it('should find column by exact match in row', async () => {
-      // Find day "5" in row 2 (date header row)
+    it('should find column by exact match in row (serial number)', async () => {
+      // Find serial 45662 (Jan 5, 2025) in row 2 (date header row)
+      // Now that we use UNFORMATTED_VALUE, dates are serial numbers
       const result = await lookup(sheetRef, {
         axis: 'col',
         at: 1,  // row 2
-        value: '5',
+        value: 45662, // Jan 5, 2025 as serial
         match: 'exact',
         range: [9, 40],  // date columns start at J
       });
 
       expect(result.index).not.toBeNull();
-      // Day 5 should be at column N (0-indexed = 13)
+      // Jan 5 should be at column N (0-indexed = 13)
       expect(result.index).toBe(13);
     });
 
@@ -194,7 +274,7 @@ describe.skipIf(!hasCredentials)('Sheets Toolkit (integration)', () => {
         range: [9, 9],
       });
 
-      expect(values[0]).toBe('42');
+      expect(values[0]).toBe(42); // Returns number since we use UNFORMATTED_VALUE
 
       // Clean up: clear the cell
       await setCellValue(sheetRef, {
@@ -251,7 +331,7 @@ describe.skipIf(!hasCredentials)('Sheets Toolkit (integration)', () => {
         dateAt: 1,          // row 2 has date headers
         itemRange: [2, 30], // book rows
         dateRange: [9, 40], // date columns (J onwards)
-        lookbackDays: 31,   // all of January
+        lookbackDays: 400,  // Jan 2025 dates need ~400 days lookback from Jan 2026
         labelAt: 4,         // column E has book titles
       });
 
