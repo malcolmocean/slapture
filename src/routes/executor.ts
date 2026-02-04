@@ -3,6 +3,7 @@ import { Route, Capture } from '../types.js';
 import { Storage } from '../storage/index.js';
 import { IntendExecutor } from './intend-executor.js';
 import { NotesExecutor } from './notes-executor.js';
+import { SheetsExecutor } from './sheets-executor.js';
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
@@ -18,12 +19,14 @@ export class RouteExecutor {
   private storage: Storage | null;
   private intendExecutor: IntendExecutor | null;
   private notesExecutor: NotesExecutor | null;
+  private sheetsExecutor: SheetsExecutor | null;
 
   constructor(filestoreRoot: string = './filestore', storage?: Storage) {
     this.filestoreRoot = filestoreRoot;
     this.storage = storage || null;
     this.intendExecutor = storage ? new IntendExecutor(storage) : null;
     this.notesExecutor = storage ? new NotesExecutor(storage) : null;
+    this.sheetsExecutor = storage ? new SheetsExecutor(storage) : null;
   }
 
   async execute(
@@ -65,6 +68,23 @@ export class RouteExecutor {
         success: notesResult.status === 'success',
         status: notesResult.status,
         error: notesResult.error,
+      };
+    }
+
+    // Handle sheets destination type
+    if (route.destinationType === 'sheets') {
+      if (!this.sheetsExecutor || !capture) {
+        return {
+          success: false,
+          status: 'failed',
+          error: 'SheetsExecutor not configured or capture not provided',
+        };
+      }
+      const sheetsResult = await this.sheetsExecutor.execute(route, capture);
+      return {
+        success: sheetsResult.status === 'success',
+        status: sheetsResult.status,
+        error: sheetsResult.error,
       };
     }
 

@@ -24,7 +24,7 @@ describe.skipIf(!hasCredentials)('E2E: Bookantt', () => {
     sheet = {
       client,
       spreadsheetId: TEST_SPREADSHEET_ID,
-      sheetName: 'bookantt_2025',
+      sheetName: 'bookantt_2026',
     };
   });
 
@@ -57,13 +57,13 @@ describe.skipIf(!hasCredentials)('E2E: Bookantt', () => {
 
     const bookRow = bookResult.index!;
 
-    // Find column for day 10
+    // Find column for Jan 10, 2026
     const dateResult = await lookup(sheet, {
       axis: 'col',
       at: 1,  // row 2 (date header)
-      value: new Date(2025, 0, 10),  // Jan 10
+      value: new Date(2026, 0, 10),  // Jan 10, 2026
       match: 'date',
-      range: [9, 40],
+      range: [9, 50],
     });
 
     expect(dateResult.index).not.toBeNull();
