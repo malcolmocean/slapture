@@ -670,4 +670,117 @@ describe('Storage', () => {
       expect(retrieved).toBe('Complex ID');
     });
   });
+
+  describe('Trigger Change Reviews', () => {
+    const createTestReview = (overrides: Partial<import('../../src/types.js').TriggerChangeReview> = {}): import('../../src/types.js').TriggerChangeReview => ({
+      id: 'review-1',
+      routeId: 'gwen-memories',
+      proposedTriggers: [{ type: 'regex', pattern: '^gwen\\s+memory', priority: 10 }],
+      evolverReasoning: 'Improved pattern to be more specific',
+      createdAt: '2026-01-29T12:00:00Z',
+      status: 'pending',
+      affectedCaptures: [
+        {
+          captureId: 'cap-1',
+          raw: 'log today pushups to pushups.csv: 10',
+          routedAt: '2026-01-15T10:00:00Z',
+          recommendation: 'RE_ROUTE',
+          suggestedReroute: 'pushups',
+          reasoning: 'This is about pushups, not gwen memories',
+        },
+      ],
+      ...overrides,
+    });
+
+    it('should save and retrieve a trigger change review', async () => {
+      const review = createTestReview();
+
+      await storage.saveTriggerReview(review);
+      const retrieved = await storage.getTriggerReview('review-1');
+
+      expect(retrieved).toEqual(review);
+    });
+
+    it('should return null for non-existent review', async () => {
+      const retrieved = await storage.getTriggerReview('does-not-exist');
+      expect(retrieved).toBeNull();
+    });
+
+    it('should list all trigger change reviews', async () => {
+      const review1 = createTestReview({ id: 'review-1' });
+      const review2 = createTestReview({ id: 'review-2', status: 'approved' });
+      const review3 = createTestReview({ id: 'review-3', status: 'rejected' });
+
+      await storage.saveTriggerReview(review1);
+      await storage.saveTriggerReview(review2);
+      await storage.saveTriggerReview(review3);
+
+      const all = await storage.listTriggerReviews();
+      expect(all).toHaveLength(3);
+    });
+
+    it('should list only pending trigger change reviews', async () => {
+      const review1 = createTestReview({ id: 'review-1', status: 'pending' });
+      const review2 = createTestReview({ id: 'review-2', status: 'approved' });
+      const review3 = createTestReview({ id: 'review-3', status: 'pending' });
+
+      await storage.saveTriggerReview(review1);
+      await storage.saveTriggerReview(review2);
+      await storage.saveTriggerReview(review3);
+
+      const pending = await storage.listTriggerReviews('pending');
+      expect(pending).toHaveLength(2);
+      expect(pending.every(r => r.status === 'pending')).toBe(true);
+    });
+
+    it('should update review status to approved', async () => {
+      const review = createTestReview({ id: 'review-1', status: 'pending' });
+
+      await storage.saveTriggerReview(review);
+      await storage.updateTriggerReviewStatus('review-1', 'approved');
+
+      const updated = await storage.getTriggerReview('review-1');
+      expect(updated?.status).toBe('approved');
+    });
+
+    it('should update review status to rejected', async () => {
+      const review = createTestReview({ id: 'review-1', status: 'pending' });
+
+      await storage.saveTriggerReview(review);
+      await storage.updateTriggerReviewStatus('review-1', 'rejected');
+
+      const updated = await storage.getTriggerReview('review-1');
+      expect(updated?.status).toBe('rejected');
+    });
+
+    it('should return false when updating non-existent review', async () => {
+      const result = await storage.updateTriggerReviewStatus('does-not-exist', 'approved');
+      expect(result).toBe(false);
+    });
+
+    it('should store reviews in trigger-reviews directory', async () => {
+      const review = createTestReview({ id: 'review-xyz' });
+      await storage.saveTriggerReview(review);
+
+      const filePath = path.join(TEST_DATA_DIR, 'trigger-reviews', 'review-xyz.json');
+      expect(fs.existsSync(filePath)).toBe(true);
+    });
+
+    it('should delete a trigger change review', async () => {
+      const review = createTestReview({ id: 'review-to-delete' });
+      await storage.saveTriggerReview(review);
+
+      // Verify it exists
+      expect(await storage.getTriggerReview('review-to-delete')).not.toBeNull();
+
+      await storage.deleteTriggerReview('review-to-delete');
+
+      // Verify it's gone
+      expect(await storage.getTriggerReview('review-to-delete')).toBeNull();
+    });
+
+    it('should not throw when deleting non-existent review', async () => {
+      await expect(storage.deleteTriggerReview('does-not-exist')).resolves.not.toThrow();
+    });
+  });
 });

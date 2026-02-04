@@ -32,6 +32,10 @@ export interface Capture {
 
   retiredFromTests: boolean;
   retiredReason: string | null;
+
+  // Tiered regression protection fields
+  routingReviewQueued?: boolean;      // Awaiting human decision on re-route
+  suggestedReroute?: string | null;   // Route ID evolver thinks it should go to
 }
 
 export interface ExecutionStep {
@@ -51,6 +55,16 @@ export interface EvolverResult {
   validationPassed?: boolean;
   validationErrors?: string[];
   retriesUsed?: number;
+
+  /** Justifications for overriding soft-blocked (ai_certain) captures, keyed by capture index (1-based) */
+  overrideJustifications?: Record<string, string>;
+
+  /** Actions for freed captures, keyed by capture index (1-based) */
+  freedCaptureActions?: Record<string, {
+    action: FreedCaptureAction;
+    suggestedRoute?: string;
+    reasoning: string;
+  }>;
 }
 
 export interface RouteVersion {
@@ -314,4 +328,34 @@ export interface EvolverTestCase {
   // Classification
   isRatchetCase: boolean;  // True if evolution happened - these are never auto-deleted
   wasRegression: boolean;  // Did a prompt change break this?
+}
+
+/**
+ * Actions the evolver can recommend for freed captures
+ * (captures that no longer match after trigger evolution).
+ */
+export type FreedCaptureAction = 'RE_ROUTE' | 'MARK_FOR_REVIEW' | 'LEAVE_AS_HISTORICAL';
+
+/**
+ * A pending trigger change that requires human review.
+ * Created when the evolver wants to change triggers but would affect
+ * human-verified captures (hard-blocked).
+ */
+export interface TriggerChangeReview {
+  id: string;
+  routeId: string;
+  proposedTriggers: RouteTrigger[];
+  evolverReasoning: string;
+  createdAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+
+  /** Captures affected by this trigger change, with evolver's recommendations */
+  affectedCaptures: Array<{
+    captureId: string;
+    raw: string;
+    routedAt: string;
+    recommendation: FreedCaptureAction;
+    suggestedReroute?: string;  // Route ID if recommendation is RE_ROUTE
+    reasoning: string;
+  }>;
 }

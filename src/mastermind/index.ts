@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { Route, ParseResult, MastermindAction } from '../types.js';
 import type { IntegrationWithStatus } from '../integrations/registry.js';
+import { MASTERMIND_PRINCIPLES } from './principles.js';
 
 export interface IntegrationContext {
   integrations: IntegrationWithStatus[];
@@ -111,7 +112,13 @@ The "notes" integration lets users save context about other integrations/destina
       ? `\n${this.buildIntegrationSection(integrationContext)}\n`
       : '';
 
-    return `You are the Slapture Mastermind. You handle captures that couldn't be automatically routed.
+    return `${MASTERMIND_PRINCIPLES}
+
+---
+
+## Context: Routing Mode
+
+You are handling a capture that couldn't be automatically routed by triggers.
 ${integrationSection}
 Current routes:
 ${routeDescriptions || '(No routes defined yet)'}
