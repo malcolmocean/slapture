@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { SheetsExecutor, SheetsDestinationConfig } from '../../src/routes/sheets-executor';
-import { Storage } from '../../src/storage';
+import { FileSheetsAuthProvider } from '../../src/integrations/sheets/auth';
 import type { Route, Capture } from '../../src/types';
 
 const TEST_SPREADSHEET_ID = '1pYyHCN1osYQXoz8Qf9gjGZGP5ifhQfY_bv-c316tp4o';
@@ -31,11 +31,9 @@ function createMockCapture(raw: string, payload?: string): Capture {
 
 describe.skipIf(!hasCredentials)('SheetsExecutor E2E', () => {
   let executor: SheetsExecutor;
-  let storage: Storage;
 
   beforeAll(() => {
-    storage = new Storage('./data');
-    executor = new SheetsExecutor(storage);
+    executor = new SheetsExecutor(new FileSheetsAuthProvider());
   });
 
   describe('weight route (append_row)', () => {

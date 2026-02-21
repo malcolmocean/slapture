@@ -93,3 +93,18 @@ export interface AppendRowConfig {
   /** Values to append as a new row */
   values: unknown[];
 }
+
+/**
+ * Provides Google Sheets credentials for a given user.
+ * Implementations can read from files (local dev), Firestore (cloud), etc.
+ */
+export interface SheetsAuthProvider {
+  getCredentials(userId: string): Promise<SheetsCredentials | null>;
+}
+
+export interface SheetsCredentials {
+  clientId: string;
+  clientSecret: string;
+  accessToken: string;
+  refreshToken: string;
+}

@@ -1,10 +1,8 @@
 // src/routes/sheets-executor.ts
 import type { Route, Capture } from '../types.js';
-import type { Storage } from '../storage/index.js';
-import type { SheetRef } from '../integrations/sheets/types.js';
+import type { SheetRef, SheetsAuthProvider } from '../integrations/sheets/types.js';
 import { createSheetsClient } from '../integrations/sheets/auth.js';
 import * as toolkit from '../integrations/sheets/toolkit.js';
-import { readFileSync, existsSync } from 'fs';
 
 export interface SheetsExecutionResult {
   status: 'success' | 'failed' | 'blocked_needs_auth' | 'blocked_auth_expired';
@@ -99,10 +97,10 @@ export type ColumnSpec =
   | { type: 'literal'; value: unknown };
 
 export class SheetsExecutor {
-  private storage: Storage;
+  private authProvider: SheetsAuthProvider;
 
-  constructor(storage: Storage) {
-    this.storage = storage;
+  constructor(authProvider: SheetsAuthProvider) {
+    this.authProvider = authProvider;
   }
 
   async execute(route: Route, capture: Capture): Promise<SheetsExecutionResult> {
@@ -133,25 +131,13 @@ export class SheetsExecutor {
   }
 
   private async getSheetRef(spreadsheetId: string, sheetName: string): Promise<SheetRef | null> {
-    // For now, read credentials from secrets files
-    // Later this will integrate with the storage/auth system
-    const secretsPath = './secrets/google-secrets.json';
-    const tokensPath = './secrets/google-tokens.json';
-
-    if (!existsSync(secretsPath) || !existsSync(tokensPath)) {
+    // TODO: pass real userId through from capture context
+    const credentials = await this.authProvider.getCredentials('default');
+    if (!credentials) {
       return null;
     }
 
-    const creds = JSON.parse(readFileSync(secretsPath, 'utf-8'));
-    const tokens = JSON.parse(readFileSync(tokensPath, 'utf-8'));
-
-    const client = createSheetsClient({
-      clientId: creds.installed.client_id,
-      clientSecret: creds.installed.client_secret,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-    });
-
+    const client = createSheetsClient(credentials);
     return { client, spreadsheetId, sheetName };
   }
 

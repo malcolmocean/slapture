@@ -4,6 +4,8 @@ import { Storage } from '../storage/index.js';
 import { IntendExecutor } from './intend-executor.js';
 import { NotesExecutor } from './notes-executor.js';
 import { SheetsExecutor } from './sheets-executor.js';
+import { FileSheetsAuthProvider } from '../integrations/sheets/auth.js';
+import type { SheetsAuthProvider } from '../integrations/sheets/types.js';
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
@@ -21,12 +23,13 @@ export class RouteExecutor {
   private notesExecutor: NotesExecutor | null;
   private sheetsExecutor: SheetsExecutor | null;
 
-  constructor(filestoreRoot: string = './filestore', storage?: Storage) {
+  constructor(filestoreRoot: string = './filestore', storage?: Storage, sheetsAuthProvider?: SheetsAuthProvider) {
     this.filestoreRoot = filestoreRoot;
     this.storage = storage || null;
     this.intendExecutor = storage ? new IntendExecutor(storage) : null;
     this.notesExecutor = storage ? new NotesExecutor(storage) : null;
-    this.sheetsExecutor = storage ? new SheetsExecutor(storage) : null;
+    const authProvider = sheetsAuthProvider ?? new FileSheetsAuthProvider();
+    this.sheetsExecutor = new SheetsExecutor(authProvider);
   }
 
   async execute(
