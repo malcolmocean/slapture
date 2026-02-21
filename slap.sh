@@ -2,7 +2,14 @@
 # Quick script to test captures without a browser
 
 if [ -z "$1" ]; then
-  echo "Usage: ./test-capture.sh \"your input text\""
+  echo "Usage: ./slap.sh \"your input text\""
+  exit 1
+fi
+
+# Check if server is running
+if ! curl -s --connect-timeout 2 "http://localhost:4444/routes?token=dev-token" > /dev/null 2>&1; then
+  echo "Error: Slapture server is not running"
+  echo "Start it with: pnpm start"
   exit 1
 fi
 

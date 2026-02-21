@@ -71,6 +71,11 @@ export interface LookupSpec {
   valueSource: ValueSpec;
   match: 'exact' | 'fuzzy' | 'date';
   range?: [number, number];
+  /** If not found, create a new row/column with this template */
+  createIfMissing?: {
+    template: ValueSpec[];
+    insertAt?: 'end' | number;
+  };
 }
 
 /**
@@ -188,6 +193,15 @@ export class SheetsExecutor {
 
     // Do row lookup
     const rowValue = this.resolveValueSpec(operation.rowLookup.valueSource, context);
+    const createIfMissing = operation.rowLookup.createIfMissing
+      ? {
+          template: operation.rowLookup.createIfMissing.template.map((spec, i) =>
+            this.resolveColumnSpec(spec as ColumnSpec, context, i)
+          ),
+          insertAt: operation.rowLookup.createIfMissing.insertAt,
+        }
+      : undefined;
+
     const rowResult = await toolkit.lookup(sheet, {
       axis: 'row',
       at: operation.rowLookup.at,
@@ -197,6 +211,7 @@ export class SheetsExecutor {
       fuzzyMatcher: operation.rowLookup.match === 'fuzzy'
         ? this.createFuzzyMatcher()
         : undefined,
+      createIfMissing,
     });
 
     if (rowResult.index === null) {
