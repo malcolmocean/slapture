@@ -1,9 +1,9 @@
 // tests/integrations/sheets/toolkit.test.ts
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync, existsSync } from 'fs';
 import { createSheetsClient } from '../../../src/integrations/sheets/auth';
 import { getValues, lookup, setCellValue, appendRow, deleteRow, getRecentActivity, insertRow, sheetsSerialToDate, getCellFormatTypes } from '../../../src/integrations/sheets/toolkit';
 import type { SheetRef } from '../../../src/integrations/sheets/types';
+import { hasCredentials, loadCredentials } from '../../fixtures/sheets-test-creds';
 
 const TEST_SPREADSHEET_ID = '1pYyHCN1osYQXoz8Qf9gjGZGP5ifhQfY_bv-c316tp4o';
 
@@ -38,21 +38,16 @@ describe('sheetsSerialToDate', () => {
   });
 });
 
-// Skip if no credentials (CI environment)
-const hasCredentials = existsSync('./secrets/google-secrets.json') && existsSync('./secrets/google-tokens.json');
-
 describe.skipIf(!hasCredentials)('Sheets Toolkit (integration)', () => {
   let sheetRef: SheetRef;
 
   beforeAll(() => {
-    const creds = JSON.parse(readFileSync('./secrets/google-secrets.json', 'utf-8'));
-    const tokens = JSON.parse(readFileSync('./secrets/google-tokens.json', 'utf-8'));
-
+    const creds = loadCredentials();
     const client = createSheetsClient({
-      clientId: creds.installed.client_id,
-      clientSecret: creds.installed.client_secret,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
+      clientId: creds.clientId,
+      clientSecret: creds.clientSecret,
+      accessToken: creds.accessToken,
+      refreshToken: creds.refreshToken,
     });
 
     sheetRef = {

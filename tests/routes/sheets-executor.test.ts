@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync } from 'fs';
 import { SheetsExecutor, SheetsDestinationConfig } from '../../src/routes/sheets-executor';
 import { FileSheetsAuthProvider } from '../../src/integrations/sheets/auth';
 import type { Route, Capture } from '../../src/types';
+import { hasCredentials } from '../fixtures/sheets-test-creds';
 
 const TEST_SPREADSHEET_ID = '1pYyHCN1osYQXoz8Qf9gjGZGP5ifhQfY_bv-c316tp4o';
-const hasCredentials = existsSync('./secrets/google-secrets.json') && existsSync('./secrets/google-tokens.json');
 
 function createMockCapture(raw: string, payload?: string): Capture {
   return {

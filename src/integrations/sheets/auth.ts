@@ -25,25 +25,33 @@ export function createSheetsClient(auth: SheetsAuth): sheets_v4.Sheets {
 }
 
 /**
- * Reads Google Sheets credentials from local files in ./secrets/.
- * Used for local development.
+ * Reads Google Sheets credentials from local files.
+ * Checks ./secrets/ first (personal creds), then ./tests/fixtures/ (committable test creds).
  */
 export class FileSheetsAuthProvider implements SheetsAuthProvider {
   private secretsPath: string;
-  private tokensPath: string;
+  private tokensPaths: string[];
 
   constructor(secretsDir: string = './secrets') {
     this.secretsPath = `${secretsDir}/google-secrets.json`;
-    this.tokensPath = `${secretsDir}/google-tokens.json`;
+    this.tokensPaths = [
+      `${secretsDir}/google-tokens.json`,
+      './tests/fixtures/google-test-tokens.json',
+    ];
   }
 
   async getCredentials(_userId: string): Promise<SheetsCredentials | null> {
-    if (!existsSync(this.secretsPath) || !existsSync(this.tokensPath)) {
+    if (!existsSync(this.secretsPath)) {
+      return null;
+    }
+
+    const tokensPath = this.tokensPaths.find(p => existsSync(p));
+    if (!tokensPath) {
       return null;
     }
 
     const creds = JSON.parse(readFileSync(this.secretsPath, 'utf-8'));
-    const tokens = JSON.parse(readFileSync(this.tokensPath, 'utf-8'));
+    const tokens = JSON.parse(readFileSync(tokensPath, 'utf-8'));
 
     return {
       clientId: creds.installed.client_id,

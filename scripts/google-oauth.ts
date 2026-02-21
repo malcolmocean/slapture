@@ -1,7 +1,7 @@
 import { google } from 'googleapis';
 import { createServer } from 'http';
 import { URL } from 'url';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { exec } from 'child_process';
 
 const SCOPES = [
@@ -12,8 +12,11 @@ const SCOPES = [
 const PORT = 3333;
 const REDIRECT_URI = `http://localhost:${PORT}`;
 
+// --test flag: save to fixtures/ (committable, short-lived test creds)
+// default: save to secrets/ (gitignored, personal creds)
+const isTestMode = process.argv.includes('--test');
+
 async function main() {
-  // Load client credentials
   const credsPath = './secrets/google-secrets.json';
   const creds = JSON.parse(readFileSync(credsPath, 'utf-8'));
   const { client_id, client_secret } = creds.installed;
@@ -24,11 +27,17 @@ async function main() {
     REDIRECT_URI
   );
 
-  // Generate auth URL
+  if (isTestMode) {
+    console.log('=== TEST CREDENTIAL MODE ===');
+    console.log('Tokens will be saved to tests/fixtures/google-test-tokens.json');
+    console.log('These are committable — they use a test account and expire within a week.');
+    console.log('Sign in with the TEST account, not your personal one.\n');
+  }
+
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: SCOPES,
-    prompt: 'consent', // Force consent to get refresh_token
+    prompt: 'consent',
   });
 
   console.log('Opening browser for Google OAuth...\n');
@@ -36,12 +45,10 @@ async function main() {
   console.log(authUrl);
   console.log('\n');
 
-  // Open browser
   const openCmd = process.platform === 'darwin' ? 'open' :
                   process.platform === 'win32' ? 'start' : 'xdg-open';
   exec(`${openCmd} "${authUrl}"`);
 
-  // Start local server to catch callback
   const server = createServer(async (req, res) => {
     const url = new URL(req.url!, `http://localhost:${PORT}`);
     const code = url.searchParams.get('code');
@@ -50,8 +57,14 @@ async function main() {
       try {
         const { tokens } = await oauth2Client.getToken(code);
 
-        // Save tokens
-        const tokensPath = './secrets/google-tokens.json';
+        let tokensPath: string;
+        if (isTestMode) {
+          mkdirSync('tests/fixtures', { recursive: true });
+          tokensPath = 'tests/fixtures/google-test-tokens.json';
+        } else {
+          tokensPath = './secrets/google-tokens.json';
+        }
+
         writeFileSync(tokensPath, JSON.stringify(tokens, null, 2));
 
         console.log('✓ Tokens saved to', tokensPath);
@@ -60,12 +73,17 @@ async function main() {
         console.log('  refresh_token:', tokens.refresh_token ? 'present' : 'missing');
         console.log('  expiry_date:', tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : 'none');
 
+        if (isTestMode) {
+          console.log('\nRemember: these expire within ~7 days (Google "testing" app policy).');
+          console.log('Re-run `pnpm tsx scripts/google-oauth.ts --test` to refresh.');
+        }
+
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(`
           <html>
             <body style="font-family: system-ui; padding: 40px; text-align: center;">
-              <h1>🐬 Success!</h1>
-              <p>OAuth tokens saved. You can close this tab.</p>
+              <h1>${isTestMode ? 'Test Creds Saved!' : 'Success!'}</h1>
+              <p>OAuth tokens saved to ${tokensPath}. You can close this tab.</p>
             </body>
           </html>
         `);
