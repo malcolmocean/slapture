@@ -40,6 +40,9 @@ Description: First novel input triggers "I see you want to log gwen memories - i
 - do your best to avoid running multiple commands at once (eg pnpm)
   - eg DON'T RUN THIS: pkill -f "node dist/index.js" 2>/dev/null; sleep 1; ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" pnpm start & timeout: 30s sleep 3
   - and DON'T RUN THIS: cat > /tmp/test-prompt.ts << 'EOF'  [file contents]
+- relatedly, use actual temp scripts, since they work better for permissions
+  - eg DON'T RUN THIS: pnpm tsx -e "..."
+    - instead, make the temporary script (you can make an untracked tmp/ folder) and then run it. if you need to make a specific un
 
 ## Specs and Context
 

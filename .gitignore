@@ -6,4 +6,5 @@ test-*-data/
 test-*-filestore/
 .env
 .DS_Store
+firebase-service-account.json
 test-results/
