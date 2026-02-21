@@ -82,6 +82,16 @@ export interface NotesDestinationConfig {
 }
 
 /**
+ * Sheets destination config - full type in routes/sheets-executor.ts
+ * This is a forward declaration to avoid circular imports.
+ */
+export interface SheetsDestinationConfig {
+  spreadsheetId: string;
+  sheetName: string;
+  operation: unknown;  // Full type: SheetsOperation from sheets-executor.ts
+}
+
+/**
  * Configuration for LLM validation at the route level.
  */
 export interface RouteValidation {
@@ -111,11 +121,12 @@ export interface Route {
   /** Recent successful items (serves as positive examples for validation) */
   recentItems: CaptureRef[];
 
-  destinationType: 'fs' | 'intend' | 'notes';
+  destinationType: 'fs' | 'intend' | 'notes' | 'sheets';
   destinationConfig:
     | { filePath: string }           // fs
     | { baseUrl: string }            // intend
-    | NotesDestinationConfig;        // notes
+    | NotesDestinationConfig         // notes
+    | SheetsDestinationConfig;       // sheets (see sheets-executor.ts for type)
   transformScript: string | null;
 
   createdAt: string;

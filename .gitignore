@@ -8,3 +8,4 @@ test-*-filestore/
 .DS_Store
 firebase-service-account.json
 test-results/
+secrets/

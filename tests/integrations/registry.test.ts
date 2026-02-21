@@ -14,8 +14,8 @@ const TEST_DATA_DIR = './test-data-registry';
 
 describe('Integration Registry', () => {
   describe('INTEGRATIONS constant', () => {
-    it('should have exactly 3 integrations', () => {
-      expect(INTEGRATIONS).toHaveLength(3);
+    it('should have exactly 4 integrations', () => {
+      expect(INTEGRATIONS).toHaveLength(4);
     });
 
     it('should have intend integration with correct properties', () => {
@@ -40,6 +40,14 @@ describe('Integration Registry', () => {
       expect(notes?.name).toBe('Notes');
       expect(notes?.purpose).toBe('Save notes about integrations and destinations');
       expect(notes?.authType).toBe('none');
+    });
+
+    it('should have sheets integration with correct properties', () => {
+      const sheets = INTEGRATIONS.find(i => i.id === 'sheets');
+      expect(sheets).toBeDefined();
+      expect(sheets?.name).toBe('Google Sheets');
+      expect(sheets?.purpose).toBe('Capture data to Google Sheets - supports cell updates, row appends, and 2D lookups with fuzzy matching');
+      expect(sheets?.authType).toBe('oauth');
     });
 
     it('should have valid authType for all integrations', () => {
@@ -86,7 +94,7 @@ describe('Integration Registry', () => {
 
     it('should return all integrations with status', async () => {
       const integrations = await getIntegrationsWithStatus(storage, 'testuser');
-      expect(integrations).toHaveLength(3);
+      expect(integrations).toHaveLength(4);
 
       // Each should have status field
       for (const integration of integrations) {
