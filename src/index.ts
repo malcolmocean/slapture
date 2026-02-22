@@ -1,5 +1,6 @@
 // src/index.ts
 import 'dotenv/config';
+import { serve } from '@hono/node-server';
 import { buildServer } from './server/index.js';
 import { Storage } from './storage/index.js';
 
@@ -16,15 +17,15 @@ async function main() {
 
   const storage = new Storage(DATA_DIR);
   await storage.migrateGlobalTokensIfNeeded();
-  const server = await buildServer(storage, FILESTORE_DIR, ANTHROPIC_API_KEY);
+  const app = await buildServer(storage, FILESTORE_DIR, ANTHROPIC_API_KEY);
 
-  try {
-    await server.listen({ port: PORT, host: '0.0.0.0' });
+  serve({
+    fetch: app.fetch,
+    port: PORT,
+    hostname: '0.0.0.0',
+  }, () => {
     console.log(`Slapture server running on http://localhost:${PORT}`);
-  } catch (err) {
-    server.log.error(err);
-    process.exit(1);
-  }
+  });
 }
 
 main();
