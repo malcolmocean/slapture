@@ -1,16 +1,15 @@
 // tests/server/oauth.test.ts
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import Fastify from 'fastify';
+import { Hono } from 'hono';
 import * as fs from 'fs';
 import { Storage } from '../../src/storage';
 import { buildOAuthRoutes } from '../../src/server/oauth';
 
-// Mock fetch for token exchange
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
 describe('OAuth Endpoints', () => {
-  let app: ReturnType<typeof Fastify>;
+  let app: Hono;
   let storage: Storage;
   const testDir = './test-data-oauth';
 
@@ -19,45 +18,35 @@ describe('OAuth Endpoints', () => {
     fs.mkdirSync(testDir, { recursive: true });
     storage = new Storage(testDir);
 
-    app = Fastify();
+    app = new Hono();
     buildOAuthRoutes(app, storage, {
       intendClientId: 'test-client-id',
       intendClientSecret: 'test-client-secret',
       intendBaseUrl: 'https://intend.do',
       callbackBaseUrl: 'http://localhost:4444'
     });
-    await app.ready();
   });
 
   afterEach(async () => {
-    await app.close();
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
   describe('GET /connect/intend', () => {
     it('should require user parameter', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/connect/intend'
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error).toContain('user');
+      const response = await app.request('/connect/intend');
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toContain('user');
     });
 
     it('should redirect with user in state parameter', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/connect/intend?user=malcolm'
-      });
-
-      expect(response.statusCode).toBe(302);
-      const location = response.headers.location as string;
+      const response = await app.request('/connect/intend?user=malcolm', { redirect: 'manual' });
+      expect(response.status).toBe(302);
+      const location = response.headers.get('location')!;
       expect(location).toContain('https://intend.do/oauth/authorize');
       expect(location).toContain('client_id=test-client-id');
       expect(location).toContain('state=');
 
-      // Decode state to verify user is encoded
       const url = new URL(location);
       const state = url.searchParams.get('state');
       expect(state).toBeTruthy();
@@ -69,22 +58,15 @@ describe('OAuth Endpoints', () => {
 
   describe('GET /oauth/callback/intend', () => {
     it('should handle missing code parameter', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/oauth/callback/intend'
-      });
-
-      expect(response.statusCode).toBe(400);
+      const response = await app.request('/oauth/callback/intend');
+      expect(response.status).toBe(400);
     });
 
     it('should require state parameter', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/oauth/callback/intend?code=auth-code-123'
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error).toContain('state');
+      const response = await app.request('/oauth/callback/intend?code=auth-code-123');
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toContain('state');
     });
 
     it('should extract user from state and save tokens for that user', async () => {
@@ -97,23 +79,16 @@ describe('OAuth Endpoints', () => {
         })
       });
 
-      // Create state with user encoded
       const state = Buffer.from(JSON.stringify({ user: 'malcolm', csrf: 'test-csrf' })).toString('base64');
+      const response = await app.request(`/oauth/callback/intend?code=auth-code-123&state=${state}`, { redirect: 'manual' });
 
-      const response = await app.inject({
-        method: 'GET',
-        url: `/oauth/callback/intend?code=auth-code-123&state=${state}`
-      });
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toContain('/oauth/success');
 
-      expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('/oauth/success');
-
-      // Verify tokens were stored for 'malcolm'
       const tokens = await storage.getIntendTokens('malcolm');
       expect(tokens?.accessToken).toBe('new-access-token');
       expect(tokens?.refreshToken).toBe('new-refresh-token');
 
-      // Verify 'default' user has no tokens
       const defaultTokens = await storage.getIntendTokens('default');
       expect(defaultTokens).toBeNull();
     });
@@ -127,57 +102,39 @@ describe('OAuth Endpoints', () => {
       });
 
       const state = Buffer.from(JSON.stringify({ user: 'malcolm', csrf: 'test-csrf' })).toString('base64');
+      const response = await app.request(`/oauth/callback/intend?code=bad-code&state=${state}`, { redirect: 'manual' });
 
-      const response = await app.inject({
-        method: 'GET',
-        url: `/oauth/callback/intend?code=bad-code&state=${state}`
-      });
-
-      expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('/oauth/error');
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toContain('/oauth/error');
     });
 
     it('should handle invalid state parameter (malformed JSON)', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/oauth/callback/intend?code=auth-code-123&state=invalid-base64'
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error).toContain('state');
+      const response = await app.request('/oauth/callback/intend?code=auth-code-123&state=invalid-base64');
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toContain('state');
     });
 
     it('should handle state missing user field', async () => {
       const state = Buffer.from(JSON.stringify({ csrf: 'test-csrf' })).toString('base64');
-
-      const response = await app.inject({
-        method: 'GET',
-        url: `/oauth/callback/intend?code=auth-code-123&state=${state}`
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error).toContain('user');
+      const response = await app.request(`/oauth/callback/intend?code=auth-code-123&state=${state}`);
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toContain('user');
     });
   });
 
   describe('GET /auth/status/intend', () => {
     it('should require user parameter', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/auth/status/intend'
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error).toContain('user');
+      const response = await app.request('/auth/status/intend');
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toContain('user');
     });
 
     it('should return connected false when no tokens for user', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/auth/status/intend?user=malcolm'
-      });
-
-      const body = JSON.parse(response.body);
+      const response = await app.request('/auth/status/intend?user=malcolm');
+      const body = await response.json();
       expect(body.connected).toBe(false);
     });
 
@@ -189,12 +146,8 @@ describe('OAuth Endpoints', () => {
         baseUrl: 'https://intend.do'
       });
 
-      const response = await app.inject({
-        method: 'GET',
-        url: '/auth/status/intend?user=malcolm'
-      });
-
-      const body = JSON.parse(response.body);
+      const response = await app.request('/auth/status/intend?user=malcolm');
+      const body = await response.json();
       expect(body.connected).toBe(true);
       expect(body.expired).toBe(false);
     });
@@ -207,35 +160,23 @@ describe('OAuth Endpoints', () => {
         baseUrl: 'https://intend.do'
       });
 
-      // Check malcolm - should be connected
-      const malcolmResponse = await app.inject({
-        method: 'GET',
-        url: '/auth/status/intend?user=malcolm'
-      });
-      expect(malcolmResponse.json().connected).toBe(true);
+      const malcolmResponse = await app.request('/auth/status/intend?user=malcolm');
+      expect((await malcolmResponse.json()).connected).toBe(true);
 
-      // Check default - should not be connected
-      const defaultResponse = await app.inject({
-        method: 'GET',
-        url: '/auth/status/intend?user=default'
-      });
-      expect(defaultResponse.json().connected).toBe(false);
+      const defaultResponse = await app.request('/auth/status/intend?user=default');
+      expect((await defaultResponse.json()).connected).toBe(false);
     });
 
     it('should indicate expired tokens', async () => {
       await storage.saveIntendTokens('malcolm', {
         accessToken: 'token',
         refreshToken: 'refresh',
-        expiresAt: '2020-01-01T00:00:00Z', // Past date
+        expiresAt: '2020-01-01T00:00:00Z',
         baseUrl: 'https://intend.do'
       });
 
-      const response = await app.inject({
-        method: 'GET',
-        url: '/auth/status/intend?user=malcolm'
-      });
-
-      const body = JSON.parse(response.body);
+      const response = await app.request('/auth/status/intend?user=malcolm');
+      const body = await response.json();
       expect(body.connected).toBe(true);
       expect(body.expired).toBe(true);
     });
@@ -243,13 +184,10 @@ describe('OAuth Endpoints', () => {
 
   describe('POST /disconnect/intend', () => {
     it('should require user parameter', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/disconnect/intend'
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error).toContain('user');
+      const response = await app.request('/disconnect/intend', { method: 'POST' });
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toContain('user');
     });
 
     it('should clear tokens for specific user', async () => {
@@ -260,20 +198,15 @@ describe('OAuth Endpoints', () => {
         baseUrl: 'https://intend.do'
       });
 
-      const response = await app.inject({
-        method: 'POST',
-        url: '/disconnect/intend?user=malcolm'
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().success).toBe(true);
+      const response = await app.request('/disconnect/intend?user=malcolm', { method: 'POST' });
+      expect(response.status).toBe(200);
+      expect((await response.json()).success).toBe(true);
 
       const tokens = await storage.getIntendTokens('malcolm');
       expect(tokens).toBeNull();
     });
 
     it('should clear tokens for specific user only', async () => {
-      // Save tokens for user1 and user2
       await storage.saveIntendTokens('user1', {
         accessToken: 'token1',
         refreshToken: 'refresh1',
@@ -287,19 +220,12 @@ describe('OAuth Endpoints', () => {
         baseUrl: 'https://intend.do'
       });
 
-      // Disconnect user1
-      const response = await app.inject({
-        method: 'POST',
-        url: '/disconnect/intend?user=user1'
-      });
+      const response = await app.request('/disconnect/intend?user=user1', { method: 'POST' });
+      expect(response.status).toBe(200);
 
-      expect(response.statusCode).toBe(200);
-
-      // Verify user1 has no tokens
       const user1Tokens = await storage.getIntendTokens('user1');
       expect(user1Tokens).toBeNull();
 
-      // Verify user2 still has tokens
       const user2Tokens = await storage.getIntendTokens('user2');
       expect(user2Tokens?.accessToken).toBe('token2');
     });

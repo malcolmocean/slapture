@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import { buildServer } from '../../src/server';
 import { Storage } from '../../src/storage';
+import type { Hono } from 'hono';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -14,7 +15,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
 }));
 
 describe('Retry Blocked Captures', () => {
-  let app: Awaited<ReturnType<typeof buildServer>>;
+  let app: Hono;
   let storage: Storage;
   const testDir = './test-data-retry';
   const filestoreDir = './test-filestore-retry';
@@ -25,7 +26,6 @@ describe('Retry Blocked Captures', () => {
     fs.mkdirSync(filestoreDir, { recursive: true });
     storage = new Storage(testDir);
 
-    // Create intend route
     await storage.saveRoute({
       id: 'route-intend',
       name: 'intend',
@@ -41,7 +41,6 @@ describe('Retry Blocked Captures', () => {
       lastUsed: null
     });
 
-    // Create blocked capture
     await storage.saveCapture({
       id: 'blocked-capture-1',
       raw: 'intend: buy groceries',
@@ -58,17 +57,23 @@ describe('Retry Blocked Captures', () => {
       retiredReason: null
     }, 'default');
 
+    // Need to save config with auth token for the auth middleware
+    await storage.saveConfig({
+      authToken: 'dev-token',
+      requireApproval: false,
+      approvalGuardPrompt: null,
+      mastermindRetryAttempts: 3,
+    });
+
     app = await buildServer(storage, filestoreDir, 'test-api-key');
   });
 
   afterEach(async () => {
-    await app.close();
     fs.rmSync(testDir, { recursive: true, force: true });
     fs.rmSync(filestoreDir, { recursive: true, force: true });
   });
 
   it('should retry blocked capture after OAuth configured', async () => {
-    // Configure OAuth for 'default' user (matches the capture's username)
     await storage.saveIntendTokens('default', {
       accessToken: 'valid-token',
       refreshToken: 'refresh',
@@ -81,39 +86,28 @@ describe('Retry Blocked Captures', () => {
       json: async () => ({ id: 'intention-123', text: 'buy groceries' })
     });
 
-    const response = await app.inject({
-      method: 'POST',
-      url: '/retry/blocked-capture-1?token=dev-token'
-    });
+    const response = await app.request('/retry/blocked-capture-1?token=dev-token', { method: 'POST' });
 
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
+    expect(response.status).toBe(200);
+    const body = await response.json();
     expect(body.capture.executionResult).toBe('success');
   });
 
   it('should return 404 for non-existent capture', async () => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/retry/non-existent?token=dev-token'
-    });
-
-    expect(response.statusCode).toBe(404);
+    const response = await app.request('/retry/non-existent?token=dev-token', { method: 'POST' });
+    expect(response.status).toBe(404);
   });
 
   it('should list all blocked captures', async () => {
-    const response = await app.inject({
-      method: 'GET',
-      url: '/captures/blocked?token=dev-token'
-    });
+    const response = await app.request('/captures/blocked?token=dev-token');
 
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
+    expect(response.status).toBe(200);
+    const body = await response.json();
     expect(body.length).toBe(1);
     expect(body[0].id).toBe('blocked-capture-1');
   });
 
   it('should return 400 when capture is not blocked', async () => {
-    // Create a non-blocked capture
     await storage.saveCapture({
       id: 'success-capture',
       raw: 'test',
@@ -130,13 +124,10 @@ describe('Retry Blocked Captures', () => {
       retiredReason: null
     }, 'default');
 
-    const response = await app.inject({
-      method: 'POST',
-      url: '/retry/success-capture?token=dev-token'
-    });
+    const response = await app.request('/retry/success-capture?token=dev-token', { method: 'POST' });
 
-    expect(response.statusCode).toBe(400);
-    const body = JSON.parse(response.body);
+    expect(response.status).toBe(400);
+    const body = await response.json();
     expect(body.error).toContain('not blocked');
   });
 });

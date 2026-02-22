@@ -1,15 +1,16 @@
 // tests/unit/server.test.ts
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/server/index.js';
 import { Storage } from '../../src/storage/index.js';
 import { Route } from '../../src/types.js';
 import fs from 'fs';
+import type { Hono } from 'hono';
 
 const TEST_DATA_DIR = './test-server-data';
 const TEST_FILESTORE = './test-server-filestore';
 
 describe('HTTP Server', () => {
-  let server: Awaited<ReturnType<typeof buildServer>>;
+  let app: Hono;
   let storage: Storage;
 
   beforeAll(async () => {
@@ -21,7 +22,6 @@ describe('HTTP Server', () => {
       mastermindRetryAttempts: 3,
     });
 
-    // Create a test route
     const dumpRoute: Route = {
       id: 'route-dump',
       name: 'dump',
@@ -38,102 +38,86 @@ describe('HTTP Server', () => {
     };
     await storage.saveRoute(dumpRoute);
 
-    server = await buildServer(storage, TEST_FILESTORE, 'test-api-key');
+    app = await buildServer(storage, TEST_FILESTORE, 'test-api-key');
   });
 
   afterAll(async () => {
-    await server.close();
     fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
     fs.rmSync(TEST_FILESTORE, { recursive: true, force: true });
   });
 
   describe('POST /capture', () => {
     it('should require auth token', async () => {
-      const response = await server.inject({
+      const response = await app.request('/capture', {
         method: 'POST',
-        url: '/capture',
-        payload: { text: 'test' },
+        body: JSON.stringify({ text: 'test' }),
+        headers: { 'Content-Type': 'application/json' },
       });
 
-      expect(response.statusCode).toBe(401);
+      expect(response.status).toBe(401);
     });
 
     it('should accept capture with valid token', async () => {
-      const response = await server.inject({
+      const response = await app.request('/capture?token=test-token', {
         method: 'POST',
-        url: '/capture?token=test-token',
-        payload: { text: 'dump: hello' },
+        body: JSON.stringify({ text: 'dump: hello' }),
+        headers: { 'Content-Type': 'application/json' },
       });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
+      expect(response.status).toBe(200);
+      const body = await response.json();
       expect(body.captureId).toBeDefined();
     });
 
     it('should reject missing text', async () => {
-      const response = await server.inject({
+      const response = await app.request('/capture?token=test-token', {
         method: 'POST',
-        url: '/capture?token=test-token',
-        payload: {},
+        body: JSON.stringify({}),
+        headers: { 'Content-Type': 'application/json' },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.status).toBe(400);
     });
   });
 
   describe('GET /status/:captureId', () => {
     it('should return capture status', async () => {
-      // First create a capture
-      const createResponse = await server.inject({
+      const createResponse = await app.request('/capture?token=test-token', {
         method: 'POST',
-        url: '/capture?token=test-token',
-        payload: { text: 'dump: test status' },
+        body: JSON.stringify({ text: 'dump: test status' }),
+        headers: { 'Content-Type': 'application/json' },
       });
-      const { captureId } = JSON.parse(createResponse.body);
+      const { captureId } = await createResponse.json();
 
-      // Then get its status
-      const statusResponse = await server.inject({
-        method: 'GET',
-        url: `/status/${captureId}?token=test-token`,
-      });
+      const statusResponse = await app.request(`/status/${captureId}?token=test-token`);
 
-      expect(statusResponse.statusCode).toBe(200);
-      const status = JSON.parse(statusResponse.body);
+      expect(statusResponse.status).toBe(200);
+      const status = await statusResponse.json();
       expect(status.id).toBe(captureId);
     });
 
     it('should return 404 for unknown capture', async () => {
-      const response = await server.inject({
-        method: 'GET',
-        url: '/status/nonexistent?token=test-token',
-      });
-
-      expect(response.statusCode).toBe(404);
+      const response = await app.request('/status/nonexistent?token=test-token');
+      expect(response.status).toBe(404);
     });
   });
 
   describe('GET /routes', () => {
     it('should list routes', async () => {
-      const response = await server.inject({
-        method: 'GET',
-        url: '/routes?token=test-token',
-      });
+      const response = await app.request('/routes?token=test-token');
 
-      expect(response.statusCode).toBe(200);
-      const routes = JSON.parse(response.body);
+      expect(response.status).toBe(200);
+      const routes = await response.json();
       expect(Array.isArray(routes)).toBe(true);
     });
   });
 
   describe('GET /captures', () => {
     it('should list recent captures', async () => {
-      const response = await server.inject({
-        method: 'GET',
-        url: '/captures?token=test-token',
-      });
+      const response = await app.request('/captures?token=test-token');
 
-      expect(response.statusCode).toBe(200);
-      const captures = JSON.parse(response.body);
+      expect(response.status).toBe(200);
+      const captures = await response.json();
       expect(Array.isArray(captures)).toBe(true);
     });
   });
