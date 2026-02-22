@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+filestore
+.env
+firebase-service-account.json
+*.md
+tests
+.git
+.claude
+tmp
