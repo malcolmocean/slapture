@@ -1,0 +1,261 @@
+// src/storage/firestore.ts
+import { Firestore } from '@google-cloud/firestore';
+import type { StorageInterface } from './interface.js';
+import type { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, TriggerChangeReview } from '../types.js';
+import type { HygieneSignal } from '../hygiene/index.js';
+
+export class FirestoreStorage implements StorageInterface {
+  public db: Firestore;
+
+  constructor(projectId?: string) {
+    this.db = new Firestore({
+      projectId: projectId || process.env.FIREBASE_PROJECT_ID,
+    });
+  }
+
+  // Captures
+  async saveCapture(capture: Capture, username: string = 'default'): Promise<void> {
+    const safeTimestamp = capture.timestamp.replace(/:/g, '-').replace(/\./g, '-');
+    const docId = `${safeTimestamp}_${capture.id}`;
+    await this.db.collection('captures').doc(username).collection('items').doc(docId).set(capture);
+  }
+
+  async getCapture(id: string): Promise<Capture | null> {
+    const snapshot = await this.db.collectionGroup('items')
+      .where('id', '==', id)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) return null;
+    return snapshot.docs[0].data() as Capture;
+  }
+
+  async updateCapture(capture: Capture): Promise<void> {
+    const snapshot = await this.db.collectionGroup('items')
+      .where('id', '==', capture.id)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      await this.saveCapture(capture, capture.username || 'default');
+      return;
+    }
+
+    await snapshot.docs[0].ref.set(capture);
+  }
+
+  async listCaptures(limit: number = 50, username?: string): Promise<Capture[]> {
+    const captures = await this.listAllCaptures(username);
+    return captures
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, limit);
+  }
+
+  async listAllCaptures(username?: string): Promise<Capture[]> {
+    if (username) {
+      const snapshot = await this.db.collection('captures').doc(username).collection('items').get();
+      return snapshot.docs.map(doc => doc.data() as Capture);
+    }
+
+    const snapshot = await this.db.collectionGroup('items').get();
+    return snapshot.docs.map(doc => doc.data() as Capture);
+  }
+
+  async listCapturesNeedingAuth(): Promise<Capture[]> {
+    const captures = await this.listAllCaptures();
+    return captures.filter(c =>
+      c.executionResult === 'blocked_needs_auth' ||
+      c.executionResult === 'blocked_auth_expired'
+    );
+  }
+
+  // Routes
+  async saveRoute(route: Route): Promise<void> {
+    await this.db.collection('routes').doc(route.id).set(route);
+  }
+
+  async getRoute(id: string): Promise<Route | null> {
+    const doc = await this.db.collection('routes').doc(id).get();
+    if (!doc.exists) return null;
+    return doc.data() as Route;
+  }
+
+  async listRoutes(): Promise<Route[]> {
+    const snapshot = await this.db.collection('routes').get();
+    const routes = snapshot.docs.map(doc => doc.data() as Route);
+    return routes.filter(r => r.destinationType !== 'fs');
+  }
+
+  async getRouteByName(name: string): Promise<Route | null> {
+    const routes = await this.listRoutes();
+    return routes.find(r => r.name === name) || null;
+  }
+
+  // Execution traces
+  async saveExecutionTrace(captureId: string, trace: ExecutionStep[]): Promise<void> {
+    await this.db.collection('executions').doc(captureId).set({ captureId, trace });
+  }
+
+  // Config
+  async getConfig(): Promise<Config> {
+    const doc = await this.db.collection('config').doc('main').get();
+    if (!doc.exists) {
+      const defaultConfig: Config = {
+        authToken: 'dev-token',
+        requireApproval: false,
+        approvalGuardPrompt: null,
+        mastermindRetryAttempts: 3,
+      };
+      await this.db.collection('config').doc('main').set(defaultConfig);
+      return defaultConfig;
+    }
+    return doc.data() as Config;
+  }
+
+  async saveConfig(config: Config): Promise<void> {
+    await this.db.collection('config').doc('main').set(config);
+  }
+
+  // Inbox
+  async appendToInbox(entry: string): Promise<void> {
+    await this.db.collection('inbox').add({
+      timestamp: new Date().toISOString(),
+      entry,
+    });
+  }
+
+  // Evolver test cases
+  async saveEvolverTestCase(testCase: EvolverTestCase): Promise<void> {
+    await this.db.collection('evolver-tests').doc(testCase.id).set(testCase);
+  }
+
+  async getEvolverTestCase(id: string): Promise<EvolverTestCase | null> {
+    const doc = await this.db.collection('evolver-tests').doc(id).get();
+    if (!doc.exists) return null;
+    return doc.data() as EvolverTestCase;
+  }
+
+  async listEvolverTestCases(): Promise<EvolverTestCase[]> {
+    const snapshot = await this.db.collection('evolver-tests').get();
+    return snapshot.docs.map(doc => doc.data() as EvolverTestCase);
+  }
+
+  async deleteEvolverTestCase(id: string): Promise<void> {
+    await this.db.collection('evolver-tests').doc(id).delete();
+  }
+
+  async pruneEvolverTestCases(keepRecent: number = 5): Promise<void> {
+    const allCases = await this.listEvolverTestCases();
+    const nonRatchetCases = allCases.filter(tc => !tc.isRatchetCase);
+    nonRatchetCases.sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    const toDelete = nonRatchetCases.slice(keepRecent);
+    for (const tc of toDelete) {
+      await this.deleteEvolverTestCase(tc.id);
+    }
+  }
+
+  // Per-user tokens
+  async saveIntendTokens(username: string, tokens: IntendTokens): Promise<void> {
+    await this.db.collection('users').doc(username).set(
+      { integrations: { intend: tokens } },
+      { merge: true }
+    );
+  }
+
+  async getIntendTokens(username: string): Promise<IntendTokens | null> {
+    const doc = await this.db.collection('users').doc(username).get();
+    if (!doc.exists) return null;
+    const data = doc.data();
+    return data?.integrations?.intend || null;
+  }
+
+  async clearIntendTokens(username: string): Promise<void> {
+    const doc = await this.db.collection('users').doc(username).get();
+    if (!doc.exists) return;
+    const data = doc.data() || {};
+    if (data.integrations) {
+      delete data.integrations.intend;
+      await this.db.collection('users').doc(username).set(data);
+    }
+  }
+
+  // Integration notes
+  async getIntegrationNote(username: string, integrationId: string): Promise<string | null> {
+    const doc = await this.db.collection('users').doc(username)
+      .collection('notes').doc(`integration-${integrationId}`).get();
+    if (!doc.exists) return null;
+    return doc.data()?.content || null;
+  }
+
+  async saveIntegrationNote(username: string, integrationId: string, content: string): Promise<void> {
+    await this.db.collection('users').doc(username)
+      .collection('notes').doc(`integration-${integrationId}`)
+      .set({ content });
+  }
+
+  // Destination notes
+  async getDestinationNote(username: string, destinationId: string): Promise<string | null> {
+    const safeId = destinationId.replace(/[/\\:*?"<>|]/g, '_');
+    const doc = await this.db.collection('users').doc(username)
+      .collection('notes').doc(`destination-${safeId}`).get();
+    if (!doc.exists) return null;
+    return doc.data()?.content || null;
+  }
+
+  async saveDestinationNote(username: string, destinationId: string, content: string): Promise<void> {
+    const safeId = destinationId.replace(/[/\\:*?"<>|]/g, '_');
+    await this.db.collection('users').doc(username)
+      .collection('notes').doc(`destination-${safeId}`)
+      .set({ content });
+  }
+
+  // Hygiene signals
+  async appendHygieneSignal(signal: HygieneSignal): Promise<void> {
+    await this.db.collection('hygiene-signals').add(signal);
+  }
+
+  async getHygieneSignals(): Promise<HygieneSignal[]> {
+    const snapshot = await this.db.collection('hygiene-signals').get();
+    return snapshot.docs.map(doc => doc.data() as HygieneSignal);
+  }
+
+  async getHygieneSignalsForRoute(routeId: string): Promise<HygieneSignal[]> {
+    const snapshot = await this.db.collection('hygiene-signals')
+      .where('routeId', '==', routeId).get();
+    return snapshot.docs.map(doc => doc.data() as HygieneSignal);
+  }
+
+  // Trigger change reviews
+  async saveTriggerReview(review: TriggerChangeReview): Promise<void> {
+    await this.db.collection('trigger-reviews').doc(review.id).set(review);
+  }
+
+  async getTriggerReview(id: string): Promise<TriggerChangeReview | null> {
+    const doc = await this.db.collection('trigger-reviews').doc(id).get();
+    if (!doc.exists) return null;
+    return doc.data() as TriggerChangeReview;
+  }
+
+  async listTriggerReviews(status?: TriggerChangeReview['status']): Promise<TriggerChangeReview[]> {
+    let query: FirebaseFirestore.Query = this.db.collection('trigger-reviews');
+    if (status) {
+      query = query.where('status', '==', status);
+    }
+    const snapshot = await query.get();
+    return snapshot.docs.map(doc => doc.data() as TriggerChangeReview);
+  }
+
+  async updateTriggerReviewStatus(id: string, status: 'approved' | 'rejected'): Promise<boolean> {
+    const review = await this.getTriggerReview(id);
+    if (!review) return false;
+    review.status = status;
+    await this.saveTriggerReview(review);
+    return true;
+  }
+
+  async deleteTriggerReview(id: string): Promise<void> {
+    await this.db.collection('trigger-reviews').doc(id).delete();
+  }
+}
