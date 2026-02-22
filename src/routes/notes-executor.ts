@@ -1,6 +1,6 @@
 // src/routes/notes-executor.ts
 import type { Route, Capture, NotesDestinationConfig } from '../types.js';
-import type { Storage } from '../storage/index.js';
+import type { StorageInterface } from '../storage/interface.js';
 
 export interface NotesExecutionResult {
   status: 'success' | 'failed' | 'blocked_needs_auth' | 'blocked_auth_expired';
@@ -11,9 +11,9 @@ export interface NotesExecutionResult {
 const REPLACE_PREFIX = 'REPLACE:';
 
 export class NotesExecutor {
-  private storage: Storage;
+  private storage: StorageInterface;
 
-  constructor(storage: Storage) {
+  constructor(storage: StorageInterface) {
     this.storage = storage;
   }
 

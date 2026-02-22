@@ -1,6 +1,6 @@
 // src/integrations/registry.ts
 import type { Integration } from '../types.js';
-import type { Storage } from '../storage/index.js';
+import type { StorageInterface } from '../storage/interface.js';
 
 export type { Integration };
 
@@ -58,7 +58,7 @@ export function getIntegration(id: string): Integration | undefined {
  * - 'not-connected': No tokens exist
  */
 export async function getIntegrationsWithStatus(
-  storage: Storage,
+  storage: StorageInterface,
   username: string
 ): Promise<IntegrationWithStatus[]> {
   const result: IntegrationWithStatus[] = [];

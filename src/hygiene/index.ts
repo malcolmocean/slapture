@@ -9,7 +9,7 @@ import {
   ValidationConfidence,
   getTriggerStats,
 } from '../types.js';
-import { Storage } from '../storage/index.js';
+import type { StorageInterface } from '../storage/interface.js';
 
 /**
  * A hygiene signal that indicates a route or trigger may need review.
@@ -49,9 +49,9 @@ export interface RouteHygieneReport {
 }
 
 export class RouteHygiene {
-  private storage: Storage;
+  private storage: StorageInterface;
 
-  constructor(storage: Storage) {
+  constructor(storage: StorageInterface) {
     this.storage = storage;
   }
 

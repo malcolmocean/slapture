@@ -1,7 +1,8 @@
 // src/pipeline/index.ts
 import { v4 as uuidv4 } from 'uuid';
 import { Capture, Route, ExecutionStep, ParseResult, DispatchResult, RouteVersion, RouteTrigger, getTriggerStatus, getTriggerStats, ValidationConfidence, FreedCaptureAction } from '../types.js';
-import { Storage } from '../storage/index.js';
+import type { StorageInterface } from '../storage/interface.js';
+import type { SheetsAuthProvider } from '../integrations/sheets/types.js';
 import { Parser } from '../parser/index.js';
 import { Dispatcher } from '../dispatcher/index.js';
 import { RouteExecutor } from '../routes/executor.js';
@@ -18,7 +19,7 @@ export interface PipelineResult {
 }
 
 export class CapturePipeline {
-  private storage: Storage;
+  private storage: StorageInterface;
   private parser: Parser;
   private dispatcher: Dispatcher;
   private executor: RouteExecutor;
@@ -29,15 +30,16 @@ export class CapturePipeline {
   private codeVersion: string;
 
   constructor(
-    storage: Storage,
+    storage: StorageInterface,
     filestoreRoot: string,
     apiKey: string = '',
-    codeVersion: string = 'dev'
+    codeVersion: string = 'dev',
+    sheetsAuthProvider?: SheetsAuthProvider
   ) {
     this.storage = storage;
     this.parser = new Parser();
     this.dispatcher = new Dispatcher([]);
-    this.executor = new RouteExecutor(filestoreRoot, storage);
+    this.executor = new RouteExecutor(filestoreRoot, storage, sheetsAuthProvider);
     this.mastermind = new Mastermind(apiKey);
     this.evolver = new Evolver(apiKey);
     this.validator = new Validator(apiKey);

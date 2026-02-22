@@ -1,5 +1,5 @@
 // src/mastermind/evolver-test-runner.ts
-import { Storage } from '../storage/index.js';
+import type { StorageInterface } from '../storage/interface.js';
 import { Evolver, EvolverContext } from './evolver.js';
 import { EvolverTestCase, EvolverResult, Route, RouteTrigger } from '../types.js';
 
@@ -29,9 +29,9 @@ export interface TestRunResult {
  */
 export class EvolverTestRunner {
   private evolver: Evolver;
-  private storage: Storage;
+  private storage: StorageInterface;
 
-  constructor(apiKey: string, storage: Storage) {
+  constructor(apiKey: string, storage: StorageInterface) {
     this.evolver = new Evolver(apiKey);
     this.storage = storage;
   }

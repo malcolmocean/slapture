@@ -1,9 +1,9 @@
 import type { Hono } from 'hono';
-import { Storage } from '../storage/index.js';
+import type { StorageInterface } from '../storage/interface.js';
 import { layout, escapeHtml, formatDate, statusBadge, verificationBadge } from './templates.js';
 import { getIntegrationsWithStatus } from '../integrations/registry.js';
 
-export function buildDashboardRoutes(app: Hono, storage: Storage): void {
+export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void {
   // Dashboard home
   app.get('/dashboard', async (c) => {
     const token = c.req.query('token') || '';

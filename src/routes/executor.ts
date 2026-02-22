@@ -1,6 +1,6 @@
 // src/routes/executor.ts
 import { Route, Capture } from '../types.js';
-import { Storage } from '../storage/index.js';
+import type { StorageInterface } from '../storage/interface.js';
 import { IntendExecutor } from './intend-executor.js';
 import { NotesExecutor } from './notes-executor.js';
 import { SheetsExecutor } from './sheets-executor.js';
@@ -18,12 +18,12 @@ export interface ExecutionResult {
 
 export class RouteExecutor {
   private filestoreRoot: string;
-  private storage: Storage | null;
+  private storage: StorageInterface | null;
   private intendExecutor: IntendExecutor | null;
   private notesExecutor: NotesExecutor | null;
   private sheetsExecutor: SheetsExecutor | null;
 
-  constructor(filestoreRoot: string = './filestore', storage?: Storage, sheetsAuthProvider?: SheetsAuthProvider) {
+  constructor(filestoreRoot: string = './filestore', storage?: StorageInterface, sheetsAuthProvider?: SheetsAuthProvider) {
     this.filestoreRoot = filestoreRoot;
     this.storage = storage || null;
     this.intendExecutor = storage ? new IntendExecutor(storage) : null;

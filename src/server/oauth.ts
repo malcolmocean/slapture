@@ -1,6 +1,6 @@
 // src/server/oauth.ts
 import type { Hono } from 'hono';
-import type { Storage } from '../storage/index.js';
+import type { StorageInterface } from '../storage/interface.js';
 
 export interface OAuthConfig {
   intendClientId?: string;
@@ -83,7 +83,7 @@ function decodeState(state: string): DecodeStateResult {
 
 export function buildOAuthRoutes(
   app: Hono,
-  storage: Storage,
+  storage: StorageInterface,
   config: OAuthConfig
 ): void {
 

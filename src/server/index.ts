@@ -1,6 +1,7 @@
 // src/server/index.ts
 import { Hono } from 'hono';
-import { Storage } from '../storage/index.js';
+import type { StorageInterface } from '../storage/interface.js';
+import type { SheetsAuthProvider } from '../integrations/sheets/types.js';
 import { CapturePipeline } from '../pipeline/index.js';
 import { buildOAuthRoutes } from './oauth.js';
 import { buildDashboardRoutes } from '../dashboard/routes.js';
@@ -8,13 +9,14 @@ import path from 'path';
 import fs from 'fs';
 
 export async function buildServer(
-  storage: Storage,
+  storage: StorageInterface,
   filestoreRoot: string,
-  apiKey: string
+  apiKey: string,
+  sheetsAuthProvider?: SheetsAuthProvider
 ): Promise<Hono> {
   const app = new Hono();
 
-  const pipeline = new CapturePipeline(storage, filestoreRoot, apiKey);
+  const pipeline = new CapturePipeline(storage, filestoreRoot, apiKey, undefined, sheetsAuthProvider);
 
   // Auth middleware
   app.use('*', async (c, next) => {

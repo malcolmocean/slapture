@@ -1,5 +1,5 @@
 import type { Route, Capture } from '../types.js';
-import type { Storage } from '../storage/index.js';
+import type { StorageInterface } from '../storage/interface.js';
 import { IntendClient } from '../integrations/intend.js';
 
 export interface IntendExecutionResult {
@@ -9,9 +9,9 @@ export interface IntendExecutionResult {
 }
 
 export class IntendExecutor {
-  private storage: Storage;
+  private storage: StorageInterface;
 
-  constructor(storage: Storage) {
+  constructor(storage: StorageInterface) {
     this.storage = storage;
   }
 
