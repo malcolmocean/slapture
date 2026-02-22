@@ -1,12 +1,12 @@
-import { FastifyInstance } from 'fastify';
+import type { Hono } from 'hono';
 import { Storage } from '../storage/index.js';
 import { layout, escapeHtml, formatDate, statusBadge, verificationBadge } from './templates.js';
 import { getIntegrationsWithStatus } from '../integrations/registry.js';
 
-export function buildDashboardRoutes(server: FastifyInstance, storage: Storage): void {
+export function buildDashboardRoutes(app: Hono, storage: Storage): void {
   // Dashboard home
-  server.get<{ Querystring: { token: string } }>('/dashboard', async (request, reply) => {
-    const token = request.query.token;
+  app.get('/dashboard', async (c) => {
+    const token = c.req.query('token') || '';
 
     const [captures, routes, blocked] = await Promise.all([
       storage.listCaptures(10),
@@ -59,14 +59,15 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
       </div>
     `;
 
-    reply.type('text/html').send(layout('Home', content, token));
+    return c.html(layout('Home', content, token));
   });
 
   // Captures list
-  server.get<{
-    Querystring: { token: string; status?: string; search?: string; page?: string };
-  }>('/dashboard/captures', async (request, reply) => {
-    const { token, status, search, page: pageStr } = request.query;
+  app.get('/dashboard/captures', async (c) => {
+    const token = c.req.query('token') || '';
+    const status = c.req.query('status');
+    const search = c.req.query('search');
+    const pageStr = c.req.query('page');
     const page = parseInt(pageStr || '1', 10);
     const perPage = 25;
 
@@ -147,20 +148,17 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
       </div>
     `;
 
-    reply.type('text/html').send(layout('Captures', content, token));
+    return c.html(layout('Captures', content, token));
   });
 
   // Capture detail
-  server.get<{
-    Params: { captureId: string };
-    Querystring: { token: string };
-  }>('/dashboard/captures/:captureId', async (request, reply) => {
-    const { captureId } = request.params;
-    const { token } = request.query;
+  app.get('/dashboard/captures/:captureId', async (c) => {
+    const captureId = c.req.param('captureId');
+    const token = c.req.query('token') || '';
 
     const capture = await storage.getCapture(captureId);
     if (!capture) {
-      return reply.code(404).type('text/html').send(layout('Not Found', '<h1>Capture not found</h1>', token));
+      return c.html(layout('Not Found', '<h1>Capture not found</h1>', token), 404);
     }
 
     const content = `
@@ -230,31 +228,28 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
       </p>
     `;
 
-    reply.type('text/html').send(layout('Capture Detail', content, token));
+    return c.html(layout('Capture Detail', content, token));
   });
 
   // Verify capture
-  server.post<{
-    Params: { captureId: string };
-    Querystring: { token: string };
-  }>('/dashboard/captures/:captureId/verify', async (request, reply) => {
-    const { captureId } = request.params;
-    const { token } = request.query;
+  app.post('/dashboard/captures/:captureId/verify', async (c) => {
+    const captureId = c.req.param('captureId');
+    const token = c.req.query('token') || '';
 
     const capture = await storage.getCapture(captureId);
     if (!capture) {
-      return reply.code(404).send({ error: 'Capture not found' });
+      return c.json({ error: 'Capture not found' }, 404);
     }
 
     capture.verificationState = 'human_verified';
     await storage.updateCapture(capture);
 
-    reply.redirect(`/dashboard/captures/${captureId}?token=${token}`);
+    return c.redirect(`/dashboard/captures/${captureId}?token=${token}`);
   });
 
   // Routes list
-  server.get<{ Querystring: { token: string } }>('/dashboard/routes', async (request, reply) => {
-    const { token } = request.query;
+  app.get('/dashboard/routes', async (c) => {
+    const token = c.req.query('token') || '';
     const routes = await storage.listRoutes();
     const allCaptures = await storage.listAllCaptures();
 
@@ -310,20 +305,17 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
       </div>
     `;
 
-    reply.type('text/html').send(layout('Routes', content, token));
+    return c.html(layout('Routes', content, token));
   });
 
   // Route detail
-  server.get<{
-    Params: { routeId: string };
-    Querystring: { token: string };
-  }>('/dashboard/routes/:routeId', async (request, reply) => {
-    const { routeId } = request.params;
-    const { token } = request.query;
+  app.get('/dashboard/routes/:routeId', async (c) => {
+    const routeId = c.req.param('routeId');
+    const token = c.req.query('token') || '';
 
     const route = await storage.getRoute(routeId);
     if (!route) {
-      return reply.code(404).type('text/html').send(layout('Not Found', '<h1>Route not found</h1>', token));
+      return c.html(layout('Not Found', '<h1>Route not found</h1>', token), 404);
     }
 
     const allCaptures = await storage.listAllCaptures();
@@ -421,12 +413,12 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
       </p>
     `;
 
-    reply.type('text/html').send(layout(route.name, content, token));
+    return c.html(layout(route.name, content, token));
   });
 
   // Auth status page
-  server.get<{ Querystring: { token: string } }>('/dashboard/auth', async (request, reply) => {
-    const { token } = request.query;
+  app.get('/dashboard/auth', async (c) => {
+    const token = c.req.query('token') || '';
 
     // Get integrations with status for default user
     const integrations = await getIntegrationsWithStatus(storage, 'default');
@@ -506,20 +498,17 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
       </div>
     `;
 
-    reply.type('text/html').send(layout('Auth Status', content, token));
+    return c.html(layout('Auth Status', content, token));
   });
 
   // Correction page
-  server.get<{
-    Params: { captureId: string };
-    Querystring: { token: string };
-  }>('/dashboard/captures/:captureId/correct', async (request, reply) => {
-    const { captureId } = request.params;
-    const { token } = request.query;
+  app.get('/dashboard/captures/:captureId/correct', async (c) => {
+    const captureId = c.req.param('captureId');
+    const token = c.req.query('token') || '';
 
     const capture = await storage.getCapture(captureId);
     if (!capture) {
-      return reply.code(404).type('text/html').send(layout('Not Found', '<h1>Capture not found</h1>', token));
+      return c.html(layout('Not Found', '<h1>Capture not found</h1>', token), 404);
     }
 
     const routes = await storage.listRoutes();
@@ -560,22 +549,20 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
       </div>
     `;
 
-    reply.type('text/html').send(layout('Correct Capture', content, token));
+    return c.html(layout('Correct Capture', content, token));
   });
 
   // Submit correction
-  server.post<{
-    Params: { captureId: string };
-    Querystring: { token: string };
-    Body: { correctRoute: string; reason?: string };
-  }>('/dashboard/captures/:captureId/correct', async (request, reply) => {
-    const { captureId } = request.params;
-    const { token } = request.query;
-    const { correctRoute, reason } = request.body;
+  app.post('/dashboard/captures/:captureId/correct', async (c) => {
+    const captureId = c.req.param('captureId');
+    const token = c.req.query('token') || '';
+    const body = await c.req.parseBody() as Record<string, string>;
+    const correctRoute = body.correctRoute;
+    const reason = body.reason;
 
     const capture = await storage.getCapture(captureId);
     if (!capture) {
-      return reply.code(404).send({ error: 'Capture not found' });
+      return c.json({ error: 'Capture not found' }, 404);
     }
 
     // Mark capture as corrected
@@ -609,12 +596,12 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
       }
     }
 
-    reply.redirect(`/dashboard/captures/${captureId}?token=${token}`);
+    return c.redirect(`/dashboard/captures/${captureId}?token=${token}`);
   });
 
   // Test suite view
-  server.get<{ Querystring: { token: string } }>('/dashboard/test-suite', async (request, reply) => {
-    const { token } = request.query;
+  app.get('/dashboard/test-suite', async (c) => {
+    const token = c.req.query('token') || '';
 
     const allCaptures = await storage.listAllCaptures();
 
@@ -674,32 +661,30 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
       ${goldenTests.length === 0 ? '<div class="card"><p class="empty-state">No verified captures yet. Verify captures to add them to the test suite.</p></div>' : ''}
     `;
 
-    reply.type('text/html').send(layout('Test Suite', content, token));
+    return c.html(layout('Test Suite', content, token));
   });
 
   // Retire capture from test suite
-  server.post<{
-    Params: { captureId: string };
-    Querystring: { token: string };
-  }>('/dashboard/captures/:captureId/retire', async (request, reply) => {
-    const { captureId } = request.params;
-    const { token } = request.query;
+  app.post('/dashboard/captures/:captureId/retire', async (c) => {
+    const captureId = c.req.param('captureId');
+    const token = c.req.query('token') || '';
 
     const capture = await storage.getCapture(captureId);
     if (!capture) {
-      return reply.code(404).send({ error: 'Capture not found' });
+      return c.json({ error: 'Capture not found' }, 404);
     }
 
     capture.retiredFromTests = true;
     capture.retiredReason = 'Retired via dashboard';
     await storage.updateCapture(capture);
 
-    reply.redirect(`/dashboard/test-suite?token=${token}`);
+    return c.redirect(`/dashboard/test-suite?token=${token}`);
   });
 
   // Trigger Change Reviews list
-  server.get<{ Querystring: { token: string; status?: string } }>('/dashboard/reviews', async (request, reply) => {
-    const { token, status } = request.query;
+  app.get('/dashboard/reviews', async (c) => {
+    const token = c.req.query('token') || '';
+    const status = c.req.query('status');
 
     const filterStatus = status === 'all' ? undefined : (status as 'pending' | 'approved' | 'rejected' | undefined) || 'pending';
     const reviews = await storage.listTriggerReviews(filterStatus);
@@ -757,20 +742,17 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
       </div>
     `;
 
-    reply.type('text/html').send(layout('Trigger Reviews', content, token));
+    return c.html(layout('Trigger Reviews', content, token));
   });
 
   // Review detail
-  server.get<{
-    Params: { reviewId: string };
-    Querystring: { token: string };
-  }>('/dashboard/reviews/:reviewId', async (request, reply) => {
-    const { reviewId } = request.params;
-    const { token } = request.query;
+  app.get('/dashboard/reviews/:reviewId', async (c) => {
+    const reviewId = c.req.param('reviewId');
+    const token = c.req.query('token') || '';
 
     const review = await storage.getTriggerReview(reviewId);
     if (!review) {
-      return reply.code(404).type('text/html').send(layout('Not Found', '<h1>Review not found</h1>', token));
+      return c.html(layout('Not Found', '<h1>Review not found</h1>', token), 404);
     }
 
     const route = await storage.getRoute(review.routeId);
@@ -871,20 +853,17 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
       </p>
     `;
 
-    reply.type('text/html').send(layout('Review Detail', content, token));
+    return c.html(layout('Review Detail', content, token));
   });
 
   // Approve review
-  server.post<{
-    Params: { reviewId: string };
-    Querystring: { token: string };
-  }>('/dashboard/reviews/:reviewId/approve', async (request, reply) => {
-    const { reviewId } = request.params;
-    const { token } = request.query;
+  app.post('/dashboard/reviews/:reviewId/approve', async (c) => {
+    const reviewId = c.req.param('reviewId');
+    const token = c.req.query('token') || '';
 
     const review = await storage.getTriggerReview(reviewId);
     if (!review) {
-      return reply.code(404).send({ error: 'Review not found' });
+      return c.json({ error: 'Review not found' }, 404);
     }
 
     // Apply trigger changes to the route
@@ -924,25 +903,22 @@ export function buildDashboardRoutes(server: FastifyInstance, storage: Storage):
     // Update review status
     await storage.updateTriggerReviewStatus(reviewId, 'approved');
 
-    reply.redirect(`/dashboard/reviews/${reviewId}?token=${token}`);
+    return c.redirect(`/dashboard/reviews/${reviewId}?token=${token}`);
   });
 
   // Reject review
-  server.post<{
-    Params: { reviewId: string };
-    Querystring: { token: string };
-  }>('/dashboard/reviews/:reviewId/reject', async (request, reply) => {
-    const { reviewId } = request.params;
-    const { token } = request.query;
+  app.post('/dashboard/reviews/:reviewId/reject', async (c) => {
+    const reviewId = c.req.param('reviewId');
+    const token = c.req.query('token') || '';
 
     const review = await storage.getTriggerReview(reviewId);
     if (!review) {
-      return reply.code(404).send({ error: 'Review not found' });
+      return c.json({ error: 'Review not found' }, 404);
     }
 
     // Just update status - don't apply any changes
     await storage.updateTriggerReviewStatus(reviewId, 'rejected');
 
-    reply.redirect(`/dashboard/reviews/${reviewId}?token=${token}`);
+    return c.redirect(`/dashboard/reviews/${reviewId}?token=${token}`);
   });
 }

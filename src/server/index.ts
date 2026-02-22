@@ -1,6 +1,5 @@
 // src/server/index.ts
-import Fastify, { FastifyInstance } from 'fastify';
-import formbody from '@fastify/formbody';
+import { Hono } from 'hono';
 import { Storage } from '../storage/index.js';
 import { CapturePipeline } from '../pipeline/index.js';
 import { buildOAuthRoutes } from './oauth.js';
@@ -12,24 +11,18 @@ export async function buildServer(
   storage: Storage,
   filestoreRoot: string,
   apiKey: string
-): Promise<FastifyInstance> {
-  const server = Fastify({
-    logger: {
-      level: 'warn',
-    },
-  });
-
-  // Register form body parser for dashboard forms
-  await server.register(formbody);
+): Promise<Hono> {
+  const app = new Hono();
 
   const pipeline = new CapturePipeline(storage, filestoreRoot, apiKey);
 
-  // Auth hook
-  server.addHook('onRequest', async (request, reply) => {
-    // Skip auth for widget (request.url includes query string, so parse it)
-    const pathname = request.url.split('?')[0];
+  // Auth middleware
+  app.use('*', async (c, next) => {
+    const pathname = new URL(c.req.url).pathname;
+
+    // Skip auth for widget
     if (pathname === '/widget' || pathname.startsWith('/widget/')) {
-      return;
+      return next();
     }
 
     // Skip auth for OAuth routes (public endpoints)
@@ -37,56 +30,51 @@ export async function buildServer(
         pathname.startsWith('/oauth/') ||
         pathname.startsWith('/auth/status/') ||
         pathname.startsWith('/disconnect/')) {
-      return;
+      return next();
     }
 
-    const token = (request.query as Record<string, string>).token;
+    const token = c.req.query('token');
     const config = await storage.getConfig();
 
     if (token !== config.authToken) {
-      return reply.code(401).send({ error: 'Unauthorized' });
+      return c.json({ error: 'Unauthorized' }, 401);
     }
+
+    return next();
   });
 
-  // POST /capture - Submit a new capture
-  server.post<{
-    Querystring: { token: string };
-    Body: { text: string; username?: string };
-  }>('/capture', async (request, reply) => {
-    const { text, username = 'default' } = request.body || {};
+  // POST /capture
+  app.post('/capture', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { text, username = 'default' } = body;
 
     if (!text || typeof text !== 'string') {
-      return reply.code(400).send({ error: 'text is required' });
+      return c.json({ error: 'text is required' }, 400);
     }
 
     const result = await pipeline.process(text, username);
 
-    return {
+    return c.json({
       captureId: result.capture.id,
       status: result.capture.executionResult,
       routeFinal: result.capture.routeFinal,
       needsClarification: result.needsClarification,
-    };
+    });
   });
 
-  // GET /status/:captureId - Get capture status
-  server.get<{
-    Params: { captureId: string };
-    Querystring: { token: string };
-  }>('/status/:captureId', async (request, reply) => {
-    const { captureId } = request.params;
+  // GET /status/:captureId
+  app.get('/status/:captureId', async (c) => {
+    const captureId = c.req.param('captureId');
 
     const capture = await storage.getCapture(captureId);
     if (!capture) {
-      return reply.code(404).send({ error: 'Capture not found' });
+      return c.json({ error: 'Capture not found' }, 404);
     }
 
-    // Include route details for display
     let routeDisplayName: string | null = null;
     if (capture.routeFinal) {
       const route = await storage.getRoute(capture.routeFinal);
       if (route) {
-        // Format: "append-filename.csv" style or destination type
         if (route.destinationType === 'fs') {
           const operation = route.transformScript?.includes('appendFileSync') ? 'append' : 'write';
           routeDisplayName = `${operation}-${(route.destinationConfig as { filePath: string }).filePath}`;
@@ -96,78 +84,68 @@ export async function buildServer(
       }
     }
 
-    return { ...capture, routeDisplayName };
+    return c.json({ ...capture, routeDisplayName });
   });
 
-  // GET /routes - List all routes
-  server.get('/routes', async () => {
-    return storage.listRoutes();
+  // GET /routes
+  app.get('/routes', async (c) => {
+    return c.json(await storage.listRoutes());
   });
 
-  // GET /captures - List recent captures
-  server.get<{
-    Querystring: { token: string; limit?: string };
-  }>('/captures', async (request) => {
-    const limit = parseInt(request.query.limit || '50', 10);
-    return storage.listCaptures(limit);
+  // GET /captures
+  app.get('/captures', async (c) => {
+    const limit = parseInt(c.req.query('limit') || '50', 10);
+    return c.json(await storage.listCaptures(limit));
   });
 
-  // GET /captures/blocked - List blocked captures
-  server.get<{
-    Querystring: { token: string };
-  }>('/captures/blocked', async () => {
-    return storage.listCapturesNeedingAuth();
+  // GET /captures/blocked
+  app.get('/captures/blocked', async (c) => {
+    return c.json(await storage.listCapturesNeedingAuth());
   });
 
-  // POST /retry/:captureId - Retry a blocked capture
-  server.post<{
-    Params: { captureId: string };
-    Querystring: { token: string };
-  }>('/retry/:captureId', async (request, reply) => {
-    const { captureId } = request.params;
+  // POST /retry/:captureId
+  app.post('/retry/:captureId', async (c) => {
+    const captureId = c.req.param('captureId');
 
     const capture = await storage.getCapture(captureId);
     if (!capture) {
-      return reply.code(404).send({ error: 'Capture not found' });
+      return c.json({ error: 'Capture not found' }, 404);
     }
 
     if (capture.executionResult !== 'blocked_needs_auth' &&
         capture.executionResult !== 'blocked_auth_expired') {
-      return reply.code(400).send({
+      return c.json({
         error: 'Capture is not blocked',
         currentStatus: capture.executionResult
-      });
+      }, 400);
     }
 
-    // Re-execute through pipeline
     const result = await pipeline.retryCapture(capture);
-    return { capture: result.capture };
+    return c.json({ capture: result.capture });
   });
 
-  // GET /widget - Serve web widget
-  server.get('/widget', async (request, reply) => {
-    // Look for widget in src/ (source) since HTML isn't compiled
+  // GET /widget
+  app.get('/widget', async (c) => {
     const widgetPath = path.join(process.cwd(), 'src', 'widget', 'index.html');
-    console.log(`[Widget] Looking for: ${widgetPath}, cwd: ${process.cwd()}`);
 
     if (!fs.existsSync(widgetPath)) {
-      return reply.code(404).send(`Widget not found at ${widgetPath}`);
+      return c.text(`Widget not found at ${widgetPath}`, 404);
     }
 
     const html = fs.readFileSync(widgetPath, 'utf-8');
-    reply.type('text/html').send(html);
+    return c.html(html);
   });
 
-  // Add OAuth routes for intend.do integration
-  buildOAuthRoutes(server, storage, {
+  // OAuth routes
+  buildOAuthRoutes(app, storage, {
     intendClientId: process.env.INTEND_CLIENT_ID || '',
     intendClientSecret: process.env.INTEND_CLIENT_SECRET || '',
     intendBaseUrl: process.env.INTEND_BASE_URL || 'https://intend.do',
     callbackBaseUrl: process.env.CALLBACK_BASE_URL || 'http://localhost:4444'
   });
 
-  // Add dashboard routes
-  buildDashboardRoutes(server, storage);
+  // Dashboard routes
+  buildDashboardRoutes(app, storage);
 
-  return server;
+  return app;
 }
