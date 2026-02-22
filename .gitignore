@@ -9,3 +9,4 @@ test-*-filestore/
 firebase-service-account.json
 test-results/
 secrets/
+.worktrees/
