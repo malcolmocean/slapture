@@ -3,8 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, TriggerChangeReview } from '../types.js';
 import type { HygieneSignal } from '../hygiene/index.js';
+import type { StorageInterface } from './interface.js';
 
-export class Storage {
+export class Storage implements StorageInterface {
   private dataDir: string;
 
   constructor(dataDir: string = './data') {
@@ -505,3 +506,5 @@ export class Storage {
     }
   }
 }
+
+export type { StorageInterface } from './interface.js';
