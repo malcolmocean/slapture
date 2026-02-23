@@ -7,9 +7,16 @@ test.describe('Authentication', () => {
     await expect(page.locator('a[href="/login"]')).toBeVisible();
   });
 
-  test('login page loads with FirebaseUI', async ({ page }) => {
+  test('login page loads with sign-in form', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.locator('#firebaseui-auth-container')).toBeVisible();
+    await expect(page.locator('#google-btn')).toBeVisible();
+    await expect(page.locator('#email-form')).toBeVisible();
+    await expect(page.locator('#submit-btn')).toHaveText('Sign in');
+  });
+
+  test('signup page defaults to create account mode', async ({ page }) => {
+    await page.goto('/secret-signup');
+    await expect(page.locator('#submit-btn')).toHaveText('Create account');
   });
 
   test('protected routes redirect/return 401 without auth', async ({ request }) => {

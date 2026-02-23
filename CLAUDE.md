@@ -44,6 +44,16 @@ Description: First novel input triggers "I see you want to log gwen memories - i
   - eg DON'T RUN THIS: pnpm tsx -e "..."
     - instead, make the temporary script (you can make an untracked tmp/ folder) and then run it. if you need to make a specific un
 
+## Deployment
+
+Deployed on Google Cloud Run (`slapture` service, `us-east1`).
+
+```sh
+gcloud run deploy slapture --source . --region us-east1
+```
+
+**IMPORTANT:** When updating env vars, ALWAYS use `--update-env-vars` (merges), NEVER `--set-env-vars` (replaces all and wipes existing ones).
+
 ## Specs and Context
 
 For detailed requirements and rationale, see:

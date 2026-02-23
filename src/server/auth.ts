@@ -42,16 +42,10 @@ export function createAuthMiddleware(
           authMethod: 'firebase',
         };
 
-        // Auto-create user on first sign-in
+        // User must already exist (created via /api/session signup flow)
         const existingUser = await storage.getUser(decoded.uid);
         if (!existingUser) {
-          await storage.saveUser({
-            uid: decoded.uid,
-            email: decoded.email || '',
-            displayName: decoded.name || decoded.email?.split('@')[0] || 'User',
-            createdAt: new Date().toISOString(),
-            authProvider: decoded.firebase?.sign_in_provider === 'google.com' ? 'google' : 'email',
-          });
+          return c.json({ error: 'No account found. Please sign up first.' }, 403);
         }
 
         c.set('auth', authCtx);

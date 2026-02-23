@@ -5,6 +5,7 @@ import type { SheetsAuthProvider } from '../integrations/sheets/types.js';
 import { CapturePipeline } from '../pipeline/index.js';
 import { buildOAuthRoutes } from './oauth.js';
 import { buildDashboardRoutes } from '../dashboard/routes.js';
+import { getAuth } from 'firebase-admin/auth';
 import path from 'path';
 import fs from 'fs';
 
@@ -34,11 +35,30 @@ export async function buildServer(
 
     app.get('/', (c) => c.html(renderLandingPage()));
     app.get('/login', (c) => c.html(renderLoginPage(firebaseConfig)));
-    app.get('/signup', (c) => c.html(renderSignupPage(firebaseConfig)));
+    app.get('/secret-signup', (c) => c.html(renderSignupPage(firebaseConfig)));
 
     // Session endpoint for dashboard cookie auth
     app.post('/api/session', async (c) => {
-      const { idToken } = await c.req.json();
+      const { idToken, signup } = await c.req.json();
+
+      // Check if user exists — reject new accounts unless via signup page
+      const decoded = await getAuth().verifyIdToken(idToken);
+      const existingUser = await storage.getUser(decoded.uid);
+      if (!existingUser && !signup) {
+        return c.json({ error: 'No account found. Please sign up first.' }, 403);
+      }
+
+      // Auto-create user on signup
+      if (!existingUser && signup) {
+        await storage.saveUser({
+          uid: decoded.uid,
+          email: decoded.email || '',
+          displayName: decoded.name || decoded.email?.split('@')[0] || 'User',
+          createdAt: new Date().toISOString(),
+          authProvider: decoded.firebase?.sign_in_provider === 'google.com' ? 'google' : 'email',
+        });
+      }
+
       c.header('Set-Cookie', `__session=${idToken}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600`);
       return c.json({ ok: true });
     });
@@ -49,7 +69,7 @@ export async function buildServer(
     // Firebase Auth + API key middleware
     const { createAuthMiddleware } = await import('./auth.js');
     app.use('*', createAuthMiddleware(storage, {
-      publicPaths: ['/', '/login', '/signup', '/widget', '/api/session'],
+      publicPaths: ['/', '/login', '/secret-signup', '/widget', '/api/session'],
     }));
   } else {
     // Legacy token-based auth for local development
