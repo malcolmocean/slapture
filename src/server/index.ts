@@ -64,7 +64,7 @@ export async function buildServer(
   // Firebase Auth + API key middleware
   const { createAuthMiddleware } = await import('./auth.js');
   app.use('*', createAuthMiddleware(storage, {
-    publicPaths: ['/', '/login', '/secret-signup', '/widget', '/api/session'],
+    publicPaths: ['/', '/login', '/secret-signup', '/widget', '/api/session', '/oauth/callback', '/oauth/success', '/oauth/error'],
   }));
 
   // POST /capture

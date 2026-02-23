@@ -8,8 +8,41 @@ import { buildOAuthRoutes } from '../../src/server/oauth';
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
+// Helper to create app with auth context set
+function createAppWithAuth(storage: Storage, authUid: string) {
+  const app = new Hono();
+
+  // Simulate auth middleware setting the auth context
+  app.use('*', async (c, next) => {
+    c.set('auth', { uid: authUid, email: `${authUid}@test.com`, authMethod: 'firebase' as const });
+    return next();
+  });
+
+  buildOAuthRoutes(app, storage, {
+    intendClientId: 'test-client-id',
+    intendClientSecret: 'test-client-secret',
+    intendBaseUrl: 'https://intend.do',
+    callbackBaseUrl: 'http://localhost:4444'
+  });
+
+  return app;
+}
+
+// Helper to create app without auth (for testing 401s)
+function createAppNoAuth(storage: Storage) {
+  const app = new Hono();
+
+  buildOAuthRoutes(app, storage, {
+    intendClientId: 'test-client-id',
+    intendClientSecret: 'test-client-secret',
+    intendBaseUrl: 'https://intend.do',
+    callbackBaseUrl: 'http://localhost:4444'
+  });
+
+  return app;
+}
+
 describe('OAuth Endpoints', () => {
-  let app: Hono;
   let storage: Storage;
   const testDir = './test-data-oauth';
 
@@ -17,14 +50,6 @@ describe('OAuth Endpoints', () => {
     mockFetch.mockReset();
     fs.mkdirSync(testDir, { recursive: true });
     storage = new Storage(testDir);
-
-    app = new Hono();
-    buildOAuthRoutes(app, storage, {
-      intendClientId: 'test-client-id',
-      intendClientSecret: 'test-client-secret',
-      intendBaseUrl: 'https://intend.do',
-      callbackBaseUrl: 'http://localhost:4444'
-    });
   });
 
   afterEach(async () => {
@@ -32,15 +57,15 @@ describe('OAuth Endpoints', () => {
   });
 
   describe('GET /connect/intend', () => {
-    it('should require user parameter', async () => {
+    it('should return 401 when no auth', async () => {
+      const app = createAppNoAuth(storage);
       const response = await app.request('/connect/intend');
-      expect(response.status).toBe(400);
-      const body = await response.json();
-      expect(body.error).toContain('user');
+      expect(response.status).toBe(401);
     });
 
     it('should redirect with user in state parameter', async () => {
-      const response = await app.request('/connect/intend?user=malcolm', { redirect: 'manual' });
+      const app = createAppWithAuth(storage, 'malcolm');
+      const response = await app.request('/connect/intend', { redirect: 'manual' });
       expect(response.status).toBe(302);
       const location = response.headers.get('location')!;
       expect(location).toContain('https://intend.do/oauth/authorize');
@@ -58,11 +83,13 @@ describe('OAuth Endpoints', () => {
 
   describe('GET /oauth/callback/intend', () => {
     it('should handle missing code parameter', async () => {
+      const app = createAppNoAuth(storage);
       const response = await app.request('/oauth/callback/intend');
       expect(response.status).toBe(400);
     });
 
     it('should require state parameter', async () => {
+      const app = createAppNoAuth(storage);
       const response = await app.request('/oauth/callback/intend?code=auth-code-123');
       expect(response.status).toBe(400);
       const body = await response.json();
@@ -70,6 +97,7 @@ describe('OAuth Endpoints', () => {
     });
 
     it('should extract user from state and save tokens for that user', async () => {
+      const app = createAppNoAuth(storage);
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -83,7 +111,7 @@ describe('OAuth Endpoints', () => {
       const response = await app.request(`/oauth/callback/intend?code=auth-code-123&state=${state}`, { redirect: 'manual' });
 
       expect(response.status).toBe(302);
-      expect(response.headers.get('location')).toContain('/oauth/success');
+      expect(response.headers.get('location')).toContain('/dashboard/auth');
 
       const tokens = await storage.getIntendTokens('malcolm');
       expect(tokens?.accessToken).toBe('new-access-token');
@@ -94,6 +122,7 @@ describe('OAuth Endpoints', () => {
     });
 
     it('should handle token exchange failure', async () => {
+      const app = createAppNoAuth(storage);
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
@@ -109,6 +138,7 @@ describe('OAuth Endpoints', () => {
     });
 
     it('should handle invalid state parameter (malformed JSON)', async () => {
+      const app = createAppNoAuth(storage);
       const response = await app.request('/oauth/callback/intend?code=auth-code-123&state=invalid-base64');
       expect(response.status).toBe(400);
       const body = await response.json();
@@ -116,6 +146,7 @@ describe('OAuth Endpoints', () => {
     });
 
     it('should handle state missing user field', async () => {
+      const app = createAppNoAuth(storage);
       const state = Buffer.from(JSON.stringify({ csrf: 'test-csrf' })).toString('base64');
       const response = await app.request(`/oauth/callback/intend?code=auth-code-123&state=${state}`);
       expect(response.status).toBe(400);
@@ -125,15 +156,15 @@ describe('OAuth Endpoints', () => {
   });
 
   describe('GET /auth/status/intend', () => {
-    it('should require user parameter', async () => {
+    it('should return 401 when no auth', async () => {
+      const app = createAppNoAuth(storage);
       const response = await app.request('/auth/status/intend');
-      expect(response.status).toBe(400);
-      const body = await response.json();
-      expect(body.error).toContain('user');
+      expect(response.status).toBe(401);
     });
 
     it('should return connected false when no tokens for user', async () => {
-      const response = await app.request('/auth/status/intend?user=malcolm');
+      const app = createAppWithAuth(storage, 'malcolm');
+      const response = await app.request('/auth/status/intend');
       const body = await response.json();
       expect(body.connected).toBe(false);
     });
@@ -146,7 +177,8 @@ describe('OAuth Endpoints', () => {
         baseUrl: 'https://intend.do'
       });
 
-      const response = await app.request('/auth/status/intend?user=malcolm');
+      const app = createAppWithAuth(storage, 'malcolm');
+      const response = await app.request('/auth/status/intend');
       const body = await response.json();
       expect(body.connected).toBe(true);
       expect(body.expired).toBe(false);
@@ -160,10 +192,12 @@ describe('OAuth Endpoints', () => {
         baseUrl: 'https://intend.do'
       });
 
-      const malcolmResponse = await app.request('/auth/status/intend?user=malcolm');
+      const appMalcolm = createAppWithAuth(storage, 'malcolm');
+      const malcolmResponse = await appMalcolm.request('/auth/status/intend');
       expect((await malcolmResponse.json()).connected).toBe(true);
 
-      const defaultResponse = await app.request('/auth/status/intend?user=default');
+      const appDefault = createAppWithAuth(storage, 'default');
+      const defaultResponse = await appDefault.request('/auth/status/intend');
       expect((await defaultResponse.json()).connected).toBe(false);
     });
 
@@ -175,7 +209,8 @@ describe('OAuth Endpoints', () => {
         baseUrl: 'https://intend.do'
       });
 
-      const response = await app.request('/auth/status/intend?user=malcolm');
+      const app = createAppWithAuth(storage, 'malcolm');
+      const response = await app.request('/auth/status/intend');
       const body = await response.json();
       expect(body.connected).toBe(true);
       expect(body.expired).toBe(true);
@@ -183,11 +218,10 @@ describe('OAuth Endpoints', () => {
   });
 
   describe('POST /disconnect/intend', () => {
-    it('should require user parameter', async () => {
+    it('should return 401 when no auth', async () => {
+      const app = createAppNoAuth(storage);
       const response = await app.request('/disconnect/intend', { method: 'POST' });
-      expect(response.status).toBe(400);
-      const body = await response.json();
-      expect(body.error).toContain('user');
+      expect(response.status).toBe(401);
     });
 
     it('should clear tokens for specific user', async () => {
@@ -198,7 +232,8 @@ describe('OAuth Endpoints', () => {
         baseUrl: 'https://intend.do'
       });
 
-      const response = await app.request('/disconnect/intend?user=malcolm', { method: 'POST' });
+      const app = createAppWithAuth(storage, 'malcolm');
+      const response = await app.request('/disconnect/intend', { method: 'POST' });
       expect(response.status).toBe(200);
       expect((await response.json()).success).toBe(true);
 
@@ -220,7 +255,8 @@ describe('OAuth Endpoints', () => {
         baseUrl: 'https://intend.do'
       });
 
-      const response = await app.request('/disconnect/intend?user=user1', { method: 'POST' });
+      const app = createAppWithAuth(storage, 'user1');
+      const response = await app.request('/disconnect/intend', { method: 'POST' });
       expect(response.status).toBe(200);
 
       const user1Tokens = await storage.getIntendTokens('user1');
@@ -228,6 +264,20 @@ describe('OAuth Endpoints', () => {
 
       const user2Tokens = await storage.getIntendTokens('user2');
       expect(user2Tokens?.accessToken).toBe('token2');
+    });
+
+    it('should support redirect query param', async () => {
+      await storage.saveIntendTokens('malcolm', {
+        accessToken: 'token',
+        refreshToken: 'refresh',
+        expiresAt: '2030-01-01T00:00:00Z',
+        baseUrl: 'https://intend.do'
+      });
+
+      const app = createAppWithAuth(storage, 'malcolm');
+      const response = await app.request('/disconnect/intend?redirect=/dashboard/auth', { method: 'POST', redirect: 'manual' });
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toBe('/dashboard/auth');
     });
   });
 });

@@ -88,11 +88,11 @@ export function buildOAuthRoutes(
 ): void {
 
   app.get('/connect/intend', async (c) => {
-    const user = c.req.query('user');
-
-    if (!user) {
-      return c.json({ error: 'Missing required user parameter' }, 400);
+    const auth = c.get('auth');
+    if (!auth?.uid) {
+      return c.json({ error: 'Authentication required' }, 401);
     }
+    const user = auth.uid;
 
     try {
       const credentials = await getOrRegisterClient(config);
@@ -173,7 +173,7 @@ export function buildOAuthRoutes(
       });
 
       console.log(`[OAuth] intend.do connected successfully for user: ${user}`);
-      return c.redirect('/oauth/success?integration=intend');
+      return c.redirect('/dashboard/auth');
     } catch (error) {
       console.error('[OAuth] Error during token exchange:', error);
       return c.redirect('/oauth/error?reason=internal_error');
@@ -181,11 +181,11 @@ export function buildOAuthRoutes(
   });
 
   app.get('/auth/status/intend', async (c) => {
-    const user = c.req.query('user');
-
-    if (!user) {
-      return c.json({ error: 'Missing required user parameter' }, 400);
+    const auth = c.get('auth');
+    if (!auth?.uid) {
+      return c.json({ error: 'Authentication required' }, 401);
     }
+    const user = auth.uid;
 
     const tokens = await storage.getIntendTokens(user);
     const connected = tokens !== null;
@@ -202,14 +202,19 @@ export function buildOAuthRoutes(
   });
 
   app.post('/disconnect/intend', async (c) => {
-    const user = c.req.query('user');
-
-    if (!user) {
-      return c.json({ error: 'Missing required user parameter' }, 400);
+    const auth = c.get('auth');
+    if (!auth?.uid) {
+      return c.json({ error: 'Authentication required' }, 401);
     }
+    const user = auth.uid;
 
     await storage.clearIntendTokens(user);
     console.log(`[OAuth] intend.do disconnected for user: ${user}`);
+
+    const redirect = c.req.query('redirect');
+    if (redirect) {
+      return c.redirect(redirect);
+    }
     return c.json({ success: true });
   });
 
