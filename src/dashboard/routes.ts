@@ -6,8 +6,6 @@ import { getIntegrationsWithStatus } from '../integrations/registry.js';
 export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void {
   // Dashboard home
   app.get('/dashboard', async (c) => {
-    const token = c.req.query('token') || '';
-
     const [captures, routes, blocked] = await Promise.all([
       storage.listCaptures(10),
       storage.listRoutes(),
@@ -54,17 +52,16 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
               `).join('')}
             </tbody>
           </table>
-          <p style="margin-top: 1rem;"><a href="/dashboard/captures?token=${token}">View all captures →</a></p>
+          <p style="margin-top: 1rem;"><a href="/dashboard/captures">View all captures →</a></p>
         `}
       </div>
     `;
 
-    return c.html(layout('Home', content, token));
+    return c.html(layout('Home', content));
   });
 
   // Captures list
   app.get('/dashboard/captures', async (c) => {
-    const token = c.req.query('token') || '';
     const status = c.req.query('status');
     const search = c.req.query('search');
     const pageStr = c.req.query('page');
@@ -100,7 +97,6 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       <h1>Captures</h1>
 
       <form class="filter-bar" method="get" action="/dashboard/captures">
-        <input type="hidden" name="token" value="${token}">
         <select name="status" onchange="this.form.submit()">
           ${statuses.map(s => `<option value="${s}" ${status === s ? 'selected' : ''}>${s === 'all' ? 'All Statuses' : s}</option>`).join('')}
         </select>
@@ -130,7 +126,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
                   <td>${statusBadge(c.executionResult)}</td>
                   <td>${verificationBadge(c.verificationState)}</td>
                   <td>
-                    <a href="/dashboard/captures/${c.id}?token=${token}" class="btn btn-secondary">View</a>
+                    <a href="/dashboard/captures/${c.id}" class="btn btn-secondary">View</a>
                   </td>
                 </tr>
               `).join('')}
@@ -139,26 +135,25 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
 
           ${totalPages > 1 ? `
             <div style="margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: center;">
-              ${page > 1 ? `<a href="/dashboard/captures?token=${token}&status=${status || 'all'}&search=${encodeURIComponent(search || '')}&page=${page - 1}" class="btn btn-secondary">← Prev</a>` : ''}
+              ${page > 1 ? `<a href="/dashboard/captures?status=${status || 'all'}&search=${encodeURIComponent(search || '')}&page=${page - 1}" class="btn btn-secondary">← Prev</a>` : ''}
               <span style="padding: 0.5rem;">Page ${page} of ${totalPages}</span>
-              ${page < totalPages ? `<a href="/dashboard/captures?token=${token}&status=${status || 'all'}&search=${encodeURIComponent(search || '')}&page=${page + 1}" class="btn btn-secondary">Next →</a>` : ''}
+              ${page < totalPages ? `<a href="/dashboard/captures?status=${status || 'all'}&search=${encodeURIComponent(search || '')}&page=${page + 1}" class="btn btn-secondary">Next →</a>` : ''}
             </div>
           ` : ''}
         `}
       </div>
     `;
 
-    return c.html(layout('Captures', content, token));
+    return c.html(layout('Captures', content));
   });
 
   // Capture detail
   app.get('/dashboard/captures/:captureId', async (c) => {
     const captureId = c.req.param('captureId');
-    const token = c.req.query('token') || '';
 
     const capture = await storage.getCapture(captureId);
     if (!capture) {
-      return c.html(layout('Not Found', '<h1>Capture not found</h1>', token), 404);
+      return c.html(layout('Not Found', '<h1>Capture not found</h1>'), 404);
     }
 
     const content = `
@@ -176,7 +171,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
           <tr><td><strong>Time</strong></td><td>${formatDate(capture.timestamp)}</td></tr>
           <tr><td><strong>Status</strong></td><td>${statusBadge(capture.executionResult)}</td></tr>
           <tr><td><strong>Verification</strong></td><td>${verificationBadge(capture.verificationState)}</td></tr>
-          <tr><td><strong>Route</strong></td><td>${capture.routeFinal ? `<a href="/dashboard/routes/${capture.routeFinal}?token=${token}">${capture.routeFinal}</a>` : '-'}</td></tr>
+          <tr><td><strong>Route</strong></td><td>${capture.routeFinal ? `<a href="/dashboard/routes/${capture.routeFinal}">${capture.routeFinal}</a>` : '-'}</td></tr>
           <tr><td><strong>Confidence</strong></td><td>${capture.routeConfidence || '-'}</td></tr>
         </table>
       </div>
@@ -185,14 +180,14 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
         <h3>Actions</h3>
         <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
           ${capture.verificationState !== 'human_verified' ? `
-            <form method="post" action="/dashboard/captures/${captureId}/verify?token=${token}" style="margin: 0;">
+            <form method="post" action="/dashboard/captures/${captureId}/verify" style="margin: 0;">
               <button type="submit" class="btn btn-primary">Verify Correct</button>
             </form>
-            <a href="/dashboard/captures/${captureId}/correct?token=${token}" class="btn btn-secondary">This was wrong</a>
+            <a href="/dashboard/captures/${captureId}/correct" class="btn btn-secondary">This was wrong</a>
           ` : '<span class="badge badge-success">Already Verified</span>'}
 
           ${['blocked_needs_auth', 'blocked_auth_expired'].includes(capture.executionResult) ? `
-            <form method="post" action="/retry/${captureId}?token=${token}" style="margin: 0;">
+            <form method="post" action="/retry/${captureId}" style="margin: 0;">
               <button type="submit" class="btn btn-secondary">Retry</button>
             </form>
           ` : ''}
@@ -224,17 +219,16 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       </div>
 
       <p style="margin-top: 1rem;">
-        <a href="/dashboard/captures?token=${token}">← Back to captures</a>
+        <a href="/dashboard/captures">← Back to captures</a>
       </p>
     `;
 
-    return c.html(layout('Capture Detail', content, token));
+    return c.html(layout('Capture Detail', content));
   });
 
   // Verify capture
   app.post('/dashboard/captures/:captureId/verify', async (c) => {
     const captureId = c.req.param('captureId');
-    const token = c.req.query('token') || '';
 
     const capture = await storage.getCapture(captureId);
     if (!capture) {
@@ -244,12 +238,11 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     capture.verificationState = 'human_verified';
     await storage.updateCapture(capture);
 
-    return c.redirect(`/dashboard/captures/${captureId}?token=${token}`);
+    return c.redirect(`/dashboard/captures/${captureId}`);
   });
 
   // Routes list
   app.get('/dashboard/routes', async (c) => {
-    const token = c.req.query('token') || '';
     const routes = await storage.listRoutes();
     const allCaptures = await storage.listAllCaptures();
 
@@ -295,7 +288,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
                   <td>${r.successRate}%</td>
                   <td class="text-muted">${r.lastUsed}</td>
                   <td>
-                    <a href="/dashboard/routes/${r.id}?token=${token}" class="btn btn-secondary">View</a>
+                    <a href="/dashboard/routes/${r.id}" class="btn btn-secondary">View</a>
                   </td>
                 </tr>
               `).join('')}
@@ -305,17 +298,16 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       </div>
     `;
 
-    return c.html(layout('Routes', content, token));
+    return c.html(layout('Routes', content));
   });
 
   // Route detail
   app.get('/dashboard/routes/:routeId', async (c) => {
     const routeId = c.req.param('routeId');
-    const token = c.req.query('token') || '';
 
     const route = await storage.getRoute(routeId);
     if (!route) {
-      return c.html(layout('Not Found', '<h1>Route not found</h1>', token), 404);
+      return c.html(layout('Not Found', '<h1>Route not found</h1>'), 404);
     }
 
     const allCaptures = await storage.listAllCaptures();
@@ -375,7 +367,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
               ${routeCaptures.slice(0, 10).map(c => `
                 <tr>
                   <td>${formatDate(c.timestamp)}</td>
-                  <td class="text-truncate"><a href="/dashboard/captures/${c.id}?token=${token}">${escapeHtml(c.raw)}</a></td>
+                  <td class="text-truncate"><a href="/dashboard/captures/${c.id}">${escapeHtml(c.raw)}</a></td>
                   <td>${statusBadge(c.executionResult)}</td>
                 </tr>
               `).join('')}
@@ -409,17 +401,15 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       ` : ''}
 
       <p style="margin-top: 1rem;">
-        <a href="/dashboard/routes?token=${token}">← Back to routes</a>
+        <a href="/dashboard/routes">← Back to routes</a>
       </p>
     `;
 
-    return c.html(layout(route.name, content, token));
+    return c.html(layout(route.name, content));
   });
 
   // Auth status page
   app.get('/dashboard/auth', async (c) => {
-    const token = c.req.query('token') || '';
-
     // Get integrations with status for default user
     const integrations = await getIntegrationsWithStatus(storage, 'default');
     const blocked = await storage.listCapturesNeedingAuth();
@@ -455,11 +445,11 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
                 <td>
                   ${i.authType === 'oauth' ? `
                     ${i.status === 'connected' ? `
-                      <form method="post" action="/disconnect/${i.id}?token=${token}&redirect=/dashboard/auth" style="display: inline;">
+                      <form method="post" action="/disconnect/${i.id}?redirect=/dashboard/auth" style="display: inline;">
                         <button type="submit" class="btn btn-danger">Disconnect</button>
                       </form>
                     ` : `
-                      <a href="/connect/${i.id}?token=${token}" class="btn btn-primary">Connect</a>
+                      <a href="/connect/${i.id}" class="btn btn-primary">Connect</a>
                     `}
                   ` : '<span class="text-muted">No auth needed</span>'}
                 </td>
@@ -488,7 +478,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
                   <td class="text-truncate">${escapeHtml(c.raw)}</td>
                   <td>${statusBadge(c.executionResult)}</td>
                   <td>
-                    <a href="/dashboard/captures/${c.id}?token=${token}" class="btn btn-secondary">View</a>
+                    <a href="/dashboard/captures/${c.id}" class="btn btn-secondary">View</a>
                   </td>
                 </tr>
               `).join('')}
@@ -498,17 +488,16 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       </div>
     `;
 
-    return c.html(layout('Auth Status', content, token));
+    return c.html(layout('Auth Status', content));
   });
 
   // Correction page
   app.get('/dashboard/captures/:captureId/correct', async (c) => {
     const captureId = c.req.param('captureId');
-    const token = c.req.query('token') || '';
 
     const capture = await storage.getCapture(captureId);
     if (!capture) {
-      return c.html(layout('Not Found', '<h1>Capture not found</h1>', token), 404);
+      return c.html(layout('Not Found', '<h1>Capture not found</h1>'), 404);
     }
 
     const routes = await storage.listRoutes();
@@ -524,7 +513,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
 
       <div class="card">
         <h3>Select correct route</h3>
-        <form method="post" action="/dashboard/captures/${captureId}/correct?token=${token}">
+        <form method="post" action="/dashboard/captures/${captureId}/correct">
           <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;">
             ${routes.map(r => `
               <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
@@ -543,19 +532,18 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
 
           <div style="display: flex; gap: 1rem;">
             <button type="submit" class="btn btn-primary">Submit Correction</button>
-            <a href="/dashboard/captures/${captureId}?token=${token}" class="btn btn-secondary">Cancel</a>
+            <a href="/dashboard/captures/${captureId}" class="btn btn-secondary">Cancel</a>
           </div>
         </form>
       </div>
     `;
 
-    return c.html(layout('Correct Capture', content, token));
+    return c.html(layout('Correct Capture', content));
   });
 
   // Submit correction
   app.post('/dashboard/captures/:captureId/correct', async (c) => {
     const captureId = c.req.param('captureId');
-    const token = c.req.query('token') || '';
     const body = await c.req.parseBody() as Record<string, string>;
     const correctRoute = body.correctRoute;
     const reason = body.reason;
@@ -596,13 +584,11 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       }
     }
 
-    return c.redirect(`/dashboard/captures/${captureId}?token=${token}`);
+    return c.redirect(`/dashboard/captures/${captureId}`);
   });
 
   // Test suite view
   app.get('/dashboard/test-suite', async (c) => {
-    const token = c.req.query('token') || '';
-
     const allCaptures = await storage.listAllCaptures();
 
     // Golden tests = human_verified captures that aren't retired
@@ -646,8 +632,8 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
                   <td class="text-truncate">${escapeHtml(c.raw)}</td>
                   <td class="text-muted">${formatDate(c.timestamp)}</td>
                   <td>
-                    <a href="/dashboard/captures/${c.id}?token=${token}" class="btn btn-secondary">View</a>
-                    <form method="post" action="/dashboard/captures/${c.id}/retire?token=${token}" style="display: inline;">
+                    <a href="/dashboard/captures/${c.id}" class="btn btn-secondary">View</a>
+                    <form method="post" action="/dashboard/captures/${c.id}/retire" style="display: inline;">
                       <button type="submit" class="btn btn-danger" onclick="return confirm('Retire this test case?')">Retire</button>
                     </form>
                   </td>
@@ -661,13 +647,12 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       ${goldenTests.length === 0 ? '<div class="card"><p class="empty-state">No verified captures yet. Verify captures to add them to the test suite.</p></div>' : ''}
     `;
 
-    return c.html(layout('Test Suite', content, token));
+    return c.html(layout('Test Suite', content));
   });
 
   // Retire capture from test suite
   app.post('/dashboard/captures/:captureId/retire', async (c) => {
     const captureId = c.req.param('captureId');
-    const token = c.req.query('token') || '';
 
     const capture = await storage.getCapture(captureId);
     if (!capture) {
@@ -678,12 +663,11 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     capture.retiredReason = 'Retired via dashboard';
     await storage.updateCapture(capture);
 
-    return c.redirect(`/dashboard/test-suite?token=${token}`);
+    return c.redirect(`/dashboard/test-suite`);
   });
 
   // Trigger Change Reviews list
   app.get('/dashboard/reviews', async (c) => {
-    const token = c.req.query('token') || '';
     const status = c.req.query('status');
 
     const filterStatus = status === 'all' ? undefined : (status as 'pending' | 'approved' | 'rejected' | undefined) || 'pending';
@@ -706,7 +690,6 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       </p>
 
       <form class="filter-bar" method="get" action="/dashboard/reviews">
-        <input type="hidden" name="token" value="${token}">
         <select name="status" onchange="this.form.submit()">
           ${statuses.map(s => `<option value="${s}" ${(status || 'pending') === s ? 'selected' : ''}>${s === 'all' ? 'All Statuses' : s.charAt(0).toUpperCase() + s.slice(1)}</option>`).join('')}
         </select>
@@ -732,7 +715,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
                   <td>${r.affectedCaptures.length}</td>
                   <td><span class="badge ${reviewBadgeClass(r.status)}">${r.status}</span></td>
                   <td>
-                    <a href="/dashboard/reviews/${r.id}?token=${token}" class="btn btn-secondary">View</a>
+                    <a href="/dashboard/reviews/${r.id}" class="btn btn-secondary">View</a>
                   </td>
                 </tr>
               `).join('')}
@@ -742,17 +725,16 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       </div>
     `;
 
-    return c.html(layout('Trigger Reviews', content, token));
+    return c.html(layout('Trigger Reviews', content));
   });
 
   // Review detail
   app.get('/dashboard/reviews/:reviewId', async (c) => {
     const reviewId = c.req.param('reviewId');
-    const token = c.req.query('token') || '';
 
     const review = await storage.getTriggerReview(reviewId);
     if (!review) {
-      return c.html(layout('Not Found', '<h1>Review not found</h1>', token), 404);
+      return c.html(layout('Not Found', '<h1>Review not found</h1>'), 404);
     }
 
     const route = await storage.getRoute(review.routeId);
@@ -771,7 +753,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       <div class="card">
         <h3>Overview</h3>
         <table>
-          <tr><td><strong>Route</strong></td><td><a href="/dashboard/routes/${review.routeId}?token=${token}">${escapeHtml(route?.name || review.routeId)}</a></td></tr>
+          <tr><td><strong>Route</strong></td><td><a href="/dashboard/routes/${review.routeId}">${escapeHtml(route?.name || review.routeId)}</a></td></tr>
           <tr><td><strong>Status</strong></td><td><span class="badge ${review.status === 'pending' ? 'badge-warning' : review.status === 'approved' ? 'badge-success' : 'badge-danger'}">${review.status}</span></td></tr>
           <tr><td><strong>Created</strong></td><td>${formatDate(review.createdAt)}</td></tr>
         </table>
@@ -838,10 +820,10 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
         <div class="card">
           <h3>Actions</h3>
           <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-            <form method="post" action="/dashboard/reviews/${review.id}/approve?token=${token}" style="margin: 0;">
+            <form method="post" action="/dashboard/reviews/${review.id}/approve" style="margin: 0;">
               <button type="submit" class="btn btn-primary" onclick="return confirm('Approve these trigger changes?')">Approve Changes</button>
             </form>
-            <form method="post" action="/dashboard/reviews/${review.id}/reject?token=${token}" style="margin: 0;">
+            <form method="post" action="/dashboard/reviews/${review.id}/reject" style="margin: 0;">
               <button type="submit" class="btn btn-danger" onclick="return confirm('Reject these trigger changes?')">Reject Changes</button>
             </form>
           </div>
@@ -849,17 +831,16 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       ` : ''}
 
       <p style="margin-top: 1rem;">
-        <a href="/dashboard/reviews?token=${token}">← Back to reviews</a>
+        <a href="/dashboard/reviews">← Back to reviews</a>
       </p>
     `;
 
-    return c.html(layout('Review Detail', content, token));
+    return c.html(layout('Review Detail', content));
   });
 
   // Approve review
   app.post('/dashboard/reviews/:reviewId/approve', async (c) => {
     const reviewId = c.req.param('reviewId');
-    const token = c.req.query('token') || '';
 
     const review = await storage.getTriggerReview(reviewId);
     if (!review) {
@@ -903,13 +884,12 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     // Update review status
     await storage.updateTriggerReviewStatus(reviewId, 'approved');
 
-    return c.redirect(`/dashboard/reviews/${reviewId}?token=${token}`);
+    return c.redirect(`/dashboard/reviews/${reviewId}`);
   });
 
   // Reject review
   app.post('/dashboard/reviews/:reviewId/reject', async (c) => {
     const reviewId = c.req.param('reviewId');
-    const token = c.req.query('token') || '';
 
     const review = await storage.getTriggerReview(reviewId);
     if (!review) {
@@ -919,6 +899,6 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     // Just update status - don't apply any changes
     await storage.updateTriggerReviewStatus(reviewId, 'rejected');
 
-    return c.redirect(`/dashboard/reviews/${reviewId}?token=${token}`);
+    return c.redirect(`/dashboard/reviews/${reviewId}`);
   });
 }

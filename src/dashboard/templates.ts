@@ -1,4 +1,4 @@
-export function layout(title: string, content: string, token: string): string {
+export function layout(title: string, content: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -93,12 +93,12 @@ export function layout(title: string, content: string, token: string): string {
 <body>
   <nav>
     <span class="logo">Slapture</span>
-    <a href="/dashboard?token=${token}">Home</a>
-    <a href="/dashboard/captures?token=${token}">Captures</a>
-    <a href="/dashboard/routes?token=${token}">Routes</a>
-    <a href="/dashboard/reviews?token=${token}">Reviews</a>
-    <a href="/dashboard/auth?token=${token}">Auth Status</a>
-    <a href="/dashboard/test-suite?token=${token}">Test Suite</a>
+    <a href="/dashboard">Home</a>
+    <a href="/dashboard/captures">Captures</a>
+    <a href="/dashboard/routes">Routes</a>
+    <a href="/dashboard/reviews">Reviews</a>
+    <a href="/dashboard/auth">Auth Status</a>
+    <a href="/dashboard/test-suite">Test Suite</a>
   </nav>
   <main>
     ${content}
