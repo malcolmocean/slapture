@@ -19,12 +19,37 @@ export async function buildServer(
 
   const pipeline = new CapturePipeline(storage, filestoreRoot, apiKey, undefined, sheetsAuthProvider);
 
+  // Firebase client config (for login/signup pages)
+  const firebaseConfig = {
+    apiKey: process.env.FIREBASE_WEB_API_KEY || '',
+    authDomain: process.env.FIREBASE_AUTH_DOMAIN || '',
+    projectId: process.env.FIREBASE_PROJECT_ID || '',
+  };
+
+  // Public pages (Firebase auth mode only)
+  if (useFirebaseAuth) {
+    const { renderLandingPage } = await import('../pages/landing.js');
+    const { renderLoginPage } = await import('../pages/login.js');
+    const { renderSignupPage } = await import('../pages/signup.js');
+
+    app.get('/', (c) => c.html(renderLandingPage()));
+    app.get('/login', (c) => c.html(renderLoginPage(firebaseConfig)));
+    app.get('/signup', (c) => c.html(renderSignupPage(firebaseConfig)));
+
+    // Session endpoint for dashboard cookie auth
+    app.post('/api/session', async (c) => {
+      const { idToken } = await c.req.json();
+      c.header('Set-Cookie', `__session=${idToken}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600`);
+      return c.json({ ok: true });
+    });
+  }
+
   // Auth middleware
   if (useFirebaseAuth) {
     // Firebase Auth + API key middleware
     const { createAuthMiddleware } = await import('./auth.js');
     app.use('*', createAuthMiddleware(storage, {
-      publicPaths: ['/', '/login', '/signup', '/widget'],
+      publicPaths: ['/', '/login', '/signup', '/widget', '/api/session'],
     }));
   } else {
     // Legacy token-based auth for local development

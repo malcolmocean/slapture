@@ -41,10 +41,41 @@ export function createAuthMiddleware(
           email: decoded.email || '',
           authMethod: 'firebase',
         };
+
+        // Auto-create user on first sign-in
+        const existingUser = await storage.getUser(decoded.uid);
+        if (!existingUser) {
+          await storage.saveUser({
+            uid: decoded.uid,
+            email: decoded.email || '',
+            displayName: decoded.name || decoded.email?.split('@')[0] || 'User',
+            createdAt: new Date().toISOString(),
+            authProvider: decoded.firebase?.sign_in_provider === 'google.com' ? 'google' : 'email',
+          });
+        }
+
         c.set('auth', authCtx);
         return next();
       } catch {
         return c.json({ error: 'Invalid or expired token' }, 401);
+      }
+    }
+
+    // Try session cookie (for dashboard browsing)
+    const cookieHeader = c.req.header('Cookie');
+    const sessionMatch = cookieHeader?.match(/(?:^|;\s*)__session=([^;]+)/);
+    if (sessionMatch) {
+      try {
+        const decoded = await getAuth().verifyIdToken(sessionMatch[1]);
+        const authCtx: AuthContext = {
+          uid: decoded.uid,
+          email: decoded.email || '',
+          authMethod: 'firebase',
+        };
+        c.set('auth', authCtx);
+        return next();
+      } catch {
+        // Cookie invalid/expired, fall through
       }
     }
 
