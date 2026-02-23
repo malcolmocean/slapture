@@ -148,47 +148,39 @@
   </div>
 
   <script>
-    const urlParams = new URLSearchParams(window.location.search);
-    const API_TOKEN = urlParams.get('token');
-
-    // Detect auth mode: if no ?token= param, try Firebase Auth
-    const useFirebaseAuth = !API_TOKEN && typeof firebase !== 'undefined';
-
     let currentUser = null;
 
     const input = document.getElementById('captureInput');
     const submitBtn = document.getElementById('submitBtn');
     const statusDiv = document.getElementById('status');
 
-    if (useFirebaseAuth) {
-      // Initialize Firebase (config injected by server or use defaults)
-      const configMeta = document.querySelector('meta[name="firebase-config"]');
-      if (configMeta) {
-        firebase.initializeApp(JSON.parse(configMeta.content));
-      }
-
-      firebase.auth().onAuthStateChanged((user) => {
-        if (!user) {
-          window.location.href = '/login';
-          return;
-        }
-        currentUser = user;
-        // Enable input once authenticated
-        input.disabled = false;
-        submitBtn.disabled = false;
-      });
-
-      // Disable input until auth is confirmed
-      input.disabled = true;
-      submitBtn.disabled = true;
+    // Initialize Firebase (config injected by server)
+    const configMeta = document.querySelector('meta[name="firebase-config"]');
+    if (configMeta) {
+      firebase.initializeApp(JSON.parse(configMeta.content));
     }
+
+    firebase.auth().onAuthStateChanged((user) => {
+      if (!user) {
+        window.location.href = '/login';
+        return;
+      }
+      currentUser = user;
+      // Enable input once authenticated
+      input.disabled = false;
+      submitBtn.disabled = false;
+    });
+
+    // Disable input until auth is confirmed
+    input.disabled = true;
+    submitBtn.disabled = true;
 
     input.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') submitCapture();
     });
 
     async function getAuthHeaders() {
-      if (useFirebaseAuth && currentUser) {
+      if (currentUser) {
         const idToken = await currentUser.getIdToken();
         return {
           'Content-Type': 'application/json',
@@ -196,13 +188,6 @@
         };
       }
       return { 'Content-Type': 'application/json' };
-    }
-
-    function getAuthQuery() {
-      if (!useFirebaseAuth && API_TOKEN) {
-        return `?token=${API_TOKEN}`;
-      }
-      return '';
     }
 
     async function submitCapture() {
@@ -217,14 +202,14 @@
         // Submit capture
         setStepActive('step-parse');
         const headers = await getAuthHeaders();
-        const response = await fetch(`/capture${getAuthQuery()}`, {
+        const response = await fetch(`/capture`, {
           method: 'POST',
           headers,
           body: JSON.stringify({ text }),
         });
 
         if (!response.ok) {
-          if (response.status === 401 && useFirebaseAuth) {
+          if (response.status === 401) {
             window.location.href = '/login';
             return;
           }
@@ -253,7 +238,7 @@
       const headers = await getAuthHeaders();
 
       while (attempts < maxAttempts) {
-        const response = await fetch(`/status/${captureId}${getAuthQuery()}`, { headers });
+        const response = await fetch(`/status/${captureId}`, { headers });
         const capture = await response.json();
 
         // Update UI based on execution trace
