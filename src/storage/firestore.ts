@@ -1,7 +1,7 @@
 // src/storage/firestore.ts
 import { Firestore } from '@google-cloud/firestore';
 import type { StorageInterface } from './interface.js';
-import type { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, TriggerChangeReview } from '../types.js';
+import type { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, TriggerChangeReview, UserProfile, ApiKey } from '../types.js';
 import type { HygieneSignal } from '../hygiene/index.js';
 
 export class FirestoreStorage implements StorageInterface {
@@ -257,5 +257,57 @@ export class FirestoreStorage implements StorageInterface {
 
   async deleteTriggerReview(id: string): Promise<void> {
     await this.db.collection('trigger-reviews').doc(id).delete();
+  }
+
+  // User management
+  async saveUser(profile: UserProfile): Promise<void> {
+    await this.db.collection('users').doc(profile.uid).set(profile, { merge: true });
+  }
+
+  async getUser(uid: string): Promise<UserProfile | null> {
+    const doc = await this.db.collection('users').doc(uid).get();
+    if (!doc.exists) return null;
+    const data = doc.data();
+    if (!data?.email) return null;
+    return data as UserProfile;
+  }
+
+  // API key management
+  async saveApiKey(uid: string, key: ApiKey): Promise<void> {
+    await this.db.collection('users').doc(uid).collection('apiKeys').doc(key.id).set(key);
+  }
+
+  async listApiKeys(uid: string): Promise<ApiKey[]> {
+    const snapshot = await this.db.collection('users').doc(uid).collection('apiKeys').get();
+    return snapshot.docs.map(doc => doc.data() as ApiKey);
+  }
+
+  async getApiKey(uid: string, keyId: string): Promise<ApiKey | null> {
+    const doc = await this.db.collection('users').doc(uid).collection('apiKeys').doc(keyId).get();
+    if (!doc.exists) return null;
+    return doc.data() as ApiKey;
+  }
+
+  async updateApiKey(uid: string, key: ApiKey): Promise<void> {
+    await this.db.collection('users').doc(uid).collection('apiKeys').doc(key.id).set(key);
+  }
+
+  async deleteApiKey(uid: string, keyId: string): Promise<void> {
+    await this.db.collection('users').doc(uid).collection('apiKeys').doc(keyId).delete();
+  }
+
+  // API key index
+  async saveApiKeyIndex(keyHash: string, uid: string, keyId: string): Promise<void> {
+    await this.db.collection('apiKeyIndex').doc(keyHash).set({ uid, keyId });
+  }
+
+  async getApiKeyIndex(keyHash: string): Promise<{ uid: string; keyId: string } | null> {
+    const doc = await this.db.collection('apiKeyIndex').doc(keyHash).get();
+    if (!doc.exists) return null;
+    return doc.data() as { uid: string; keyId: string };
+  }
+
+  async deleteApiKeyIndex(keyHash: string): Promise<void> {
+    await this.db.collection('apiKeyIndex').doc(keyHash).delete();
   }
 }

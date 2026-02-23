@@ -1,5 +1,5 @@
 // src/storage/interface.ts
-import type { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, TriggerChangeReview } from '../types.js';
+import type { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, TriggerChangeReview, UserProfile, ApiKey } from '../types.js';
 import type { HygieneSignal } from '../hygiene/index.js';
 
 export interface StorageInterface {
@@ -58,4 +58,20 @@ export interface StorageInterface {
   listTriggerReviews(status?: TriggerChangeReview['status']): Promise<TriggerChangeReview[]>;
   updateTriggerReviewStatus(id: string, status: 'approved' | 'rejected'): Promise<boolean>;
   deleteTriggerReview(id: string): Promise<void>;
+
+  // User management
+  saveUser(profile: UserProfile): Promise<void>;
+  getUser(uid: string): Promise<UserProfile | null>;
+
+  // API key management
+  saveApiKey(uid: string, key: ApiKey): Promise<void>;
+  listApiKeys(uid: string): Promise<ApiKey[]>;
+  getApiKey(uid: string, keyId: string): Promise<ApiKey | null>;
+  updateApiKey(uid: string, key: ApiKey): Promise<void>;
+  deleteApiKey(uid: string, keyId: string): Promise<void>;
+
+  // API key index (for fast lookup by hash)
+  saveApiKeyIndex(keyHash: string, uid: string, keyId: string): Promise<void>;
+  getApiKeyIndex(keyHash: string): Promise<{ uid: string; keyId: string } | null>;
+  deleteApiKeyIndex(keyHash: string): Promise<void>;
 }

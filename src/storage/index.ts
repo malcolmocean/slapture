@@ -1,7 +1,7 @@
 // src/storage/index.ts
 import fs from 'fs';
 import path from 'path';
-import { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, TriggerChangeReview } from '../types.js';
+import { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, TriggerChangeReview, UserProfile, ApiKey } from '../types.js';
 import type { HygieneSignal } from '../hygiene/index.js';
 import type { StorageInterface } from './interface.js';
 
@@ -504,6 +504,38 @@ export class Storage implements StorageInterface {
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
+  }
+
+  // User management (not supported in local mode)
+  async saveUser(_profile: UserProfile): Promise<void> {
+    throw new Error('User management requires Firestore backend');
+  }
+  async getUser(_uid: string): Promise<UserProfile | null> {
+    throw new Error('User management requires Firestore backend');
+  }
+  async saveApiKey(_uid: string, _key: ApiKey): Promise<void> {
+    throw new Error('API key management requires Firestore backend');
+  }
+  async listApiKeys(_uid: string): Promise<ApiKey[]> {
+    throw new Error('API key management requires Firestore backend');
+  }
+  async getApiKey(_uid: string, _keyId: string): Promise<ApiKey | null> {
+    throw new Error('API key management requires Firestore backend');
+  }
+  async updateApiKey(_uid: string, _key: ApiKey): Promise<void> {
+    throw new Error('API key management requires Firestore backend');
+  }
+  async deleteApiKey(_uid: string, _keyId: string): Promise<void> {
+    throw new Error('API key management requires Firestore backend');
+  }
+  async saveApiKeyIndex(_keyHash: string, _uid: string, _keyId: string): Promise<void> {
+    throw new Error('API key index requires Firestore backend');
+  }
+  async getApiKeyIndex(_keyHash: string): Promise<{ uid: string; keyId: string } | null> {
+    throw new Error('API key index requires Firestore backend');
+  }
+  async deleteApiKeyIndex(_keyHash: string): Promise<void> {
+    throw new Error('API key index requires Firestore backend');
   }
 }
 
