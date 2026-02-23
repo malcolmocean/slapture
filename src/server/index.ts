@@ -161,5 +161,11 @@ export async function buildServer(
   // Dashboard routes
   buildDashboardRoutes(app, storage);
 
+  // API key management routes (only in Firebase auth mode)
+  if (useFirebaseAuth) {
+    const { buildApiKeyRoutes } = await import('./api-keys.js');
+    buildApiKeyRoutes(app, storage);
+  }
+
   return app;
 }
