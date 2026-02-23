@@ -1,10 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { loginAsTestUser } from './helpers/auth';
 
-const TOKEN = 'dev-token';
+const isRemote = !!process.env.BASE_URL;
 
 test.describe('Dashboard', () => {
   test('dashboard home loads and shows navigation', async ({ page }) => {
-    await page.goto(`/dashboard?token=${TOKEN}`);
+    await loginAsTestUser(page);
+    await page.goto(`/dashboard`);
 
     expect(await page.title()).toContain('Slapture');
     await expect(page.locator('nav')).toBeVisible();
@@ -21,8 +23,12 @@ test.describe('Dashboard', () => {
 });
 
 test.describe('Capture List', () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAsTestUser(page);
+  });
+
   test('shows capture list with filters', async ({ page }) => {
-    await page.goto(`/dashboard/captures?token=${TOKEN}`);
+    await page.goto(`/dashboard/captures`);
 
     await expect(page.locator('h1')).toContainText('Captures');
     await expect(page.locator('select[name="status"]')).toBeVisible();
@@ -30,7 +36,7 @@ test.describe('Capture List', () => {
   });
 
   test('filters by status', async ({ page }) => {
-    await page.goto(`/dashboard/captures?token=${TOKEN}&status=success`);
+    await page.goto(`/dashboard/captures?status=success`);
 
     // Should show filter applied
     const select = page.locator('select[name="status"]');
@@ -39,27 +45,32 @@ test.describe('Capture List', () => {
 });
 
 test.describe('Capture Detail', () => {
-  test('shows capture detail with execution trace', async ({ page, request }) => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(isRemote, 'Requires local routes (dump)');
+    await loginAsTestUser(page);
+  });
+
+  test('shows capture detail with execution trace', async ({ page }) => {
     // First create a capture
-    const res = await request.post(`/capture?token=${TOKEN}`, {
+    const res = await page.request.post(`/capture`, {
       data: { text: 'dump: test detail view' },
     });
     const { captureId } = await res.json();
 
-    await page.goto(`/dashboard/captures/${captureId}?token=${TOKEN}`);
+    await page.goto(`/dashboard/captures/${captureId}`);
 
     await expect(page.locator('h1')).toContainText('Capture Detail');
     await expect(page.locator('text=dump: test detail view')).toBeVisible();
     await expect(page.locator('text=Execution Trace')).toBeVisible();
   });
 
-  test('can verify a capture as correct', async ({ page, request }) => {
-    const res = await request.post(`/capture?token=${TOKEN}`, {
+  test('can verify a capture as correct', async ({ page }) => {
+    const res = await page.request.post(`/capture`, {
       data: { text: 'dump: verify me' },
     });
     const { captureId } = await res.json();
 
-    await page.goto(`/dashboard/captures/${captureId}?token=${TOKEN}`);
+    await page.goto(`/dashboard/captures/${captureId}`);
     await page.click('button:has-text("Verify Correct")');
 
     // Wait for page to reload after redirect
@@ -71,8 +82,13 @@ test.describe('Capture Detail', () => {
 });
 
 test.describe('Route Management', () => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(isRemote, 'Requires local routes (dump)');
+    await loginAsTestUser(page);
+  });
+
   test('shows route list with stats', async ({ page }) => {
-    await page.goto(`/dashboard/routes?token=${TOKEN}`);
+    await page.goto(`/dashboard/routes`);
 
     await expect(page.locator('h1')).toContainText('Routes');
     await expect(page.locator('table')).toBeVisible();
@@ -82,11 +98,11 @@ test.describe('Route Management', () => {
 
   test('shows route detail with triggers', async ({ page }) => {
     // Get the dump route ID
-    const routes = await page.request.get(`/routes?token=${TOKEN}`);
+    const routes = await page.request.get(`/routes`);
     const routeList = await routes.json();
     const dumpRoute = routeList.find((r: { name: string }) => r.name === 'dump');
 
-    await page.goto(`/dashboard/routes/${dumpRoute.id}?token=${TOKEN}`);
+    await page.goto(`/dashboard/routes/${dumpRoute.id}`);
 
     await expect(page.locator('h1')).toContainText('dump');
     await expect(page.getByRole('heading', { name: 'Triggers' })).toBeVisible();
@@ -94,8 +110,12 @@ test.describe('Route Management', () => {
 });
 
 test.describe('Auth Status', () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAsTestUser(page);
+  });
+
   test('shows integration status list', async ({ page }) => {
-    await page.goto(`/dashboard/auth?token=${TOKEN}`);
+    await page.goto(`/dashboard/auth`);
 
     await expect(page.locator('h1')).toContainText('Auth Status');
     // Should show integrations
@@ -104,7 +124,7 @@ test.describe('Auth Status', () => {
   });
 
   test('shows blocked captures count', async ({ page }) => {
-    await page.goto(`/dashboard/auth?token=${TOKEN}`);
+    await page.goto(`/dashboard/auth`);
 
     // Should show blocked captures section
     await expect(page.getByRole('heading', { name: 'Blocked Captures' })).toBeVisible();
@@ -112,14 +132,19 @@ test.describe('Auth Status', () => {
 });
 
 test.describe('Correction Flow', () => {
-  test('can mark capture as wrong and select correct route', async ({ page, request }) => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(isRemote, 'Requires local routes (dump)');
+    await loginAsTestUser(page);
+  });
+
+  test('can mark capture as wrong and select correct route', async ({ page }) => {
     // Create a capture
-    const res = await request.post(`/capture?token=${TOKEN}`, {
+    const res = await page.request.post(`/capture`, {
       data: { text: 'dump: correction test' },
     });
     const { captureId } = await res.json();
 
-    await page.goto(`/dashboard/captures/${captureId}?token=${TOKEN}`);
+    await page.goto(`/dashboard/captures/${captureId}`);
 
     // Click "This was wrong"
     await page.click('a:has-text("This was wrong")');
@@ -130,18 +155,23 @@ test.describe('Correction Flow', () => {
 });
 
 test.describe('Test Suite View', () => {
-  test('shows verified captures as golden tests', async ({ page, request }) => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(isRemote, 'Requires local routes (dump)');
+    await loginAsTestUser(page);
+  });
+
+  test('shows verified captures as golden tests', async ({ page }) => {
     // Create and verify a capture
-    const res = await request.post(`/capture?token=${TOKEN}`, {
+    const res = await page.request.post(`/capture`, {
       data: { text: 'dump: test suite item' },
     });
     const { captureId } = await res.json();
 
     // Verify it
-    await request.post(`/dashboard/captures/${captureId}/verify?token=${TOKEN}`);
+    await page.request.post(`/dashboard/captures/${captureId}/verify`);
 
     // Check test suite
-    await page.goto(`/dashboard/test-suite?token=${TOKEN}`);
+    await page.goto(`/dashboard/test-suite`);
 
     await expect(page.locator('h1')).toContainText('Test Suite');
     await expect(page.getByRole('cell', { name: 'dump: test suite item' }).first()).toBeVisible();
