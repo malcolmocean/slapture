@@ -12,43 +12,55 @@ export async function buildServer(
   storage: StorageInterface,
   filestoreRoot: string,
   apiKey: string,
-  sheetsAuthProvider?: SheetsAuthProvider
+  sheetsAuthProvider?: SheetsAuthProvider,
+  useFirebaseAuth: boolean = false,
 ): Promise<Hono> {
   const app = new Hono();
 
   const pipeline = new CapturePipeline(storage, filestoreRoot, apiKey, undefined, sheetsAuthProvider);
 
   // Auth middleware
-  app.use('*', async (c, next) => {
-    const pathname = new URL(c.req.url).pathname;
+  if (useFirebaseAuth) {
+    // Firebase Auth + API key middleware
+    const { createAuthMiddleware } = await import('./auth.js');
+    app.use('*', createAuthMiddleware(storage, {
+      publicPaths: ['/', '/login', '/signup', '/widget'],
+    }));
+  } else {
+    // Legacy token-based auth for local development
+    app.use('*', async (c, next) => {
+      const pathname = new URL(c.req.url).pathname;
 
-    // Skip auth for widget
-    if (pathname === '/widget' || pathname.startsWith('/widget/')) {
+      // Skip auth for widget
+      if (pathname === '/widget' || pathname.startsWith('/widget/')) {
+        return next();
+      }
+
+      // Skip auth for OAuth routes (public endpoints)
+      if (pathname.startsWith('/connect/') ||
+          pathname.startsWith('/oauth/') ||
+          pathname.startsWith('/auth/status/') ||
+          pathname.startsWith('/disconnect/')) {
+        return next();
+      }
+
+      const token = c.req.query('token');
+      const config = await storage.getConfig();
+
+      if (token !== config.authToken) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
+
       return next();
-    }
-
-    // Skip auth for OAuth routes (public endpoints)
-    if (pathname.startsWith('/connect/') ||
-        pathname.startsWith('/oauth/') ||
-        pathname.startsWith('/auth/status/') ||
-        pathname.startsWith('/disconnect/')) {
-      return next();
-    }
-
-    const token = c.req.query('token');
-    const config = await storage.getConfig();
-
-    if (token !== config.authToken) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
-
-    return next();
-  });
+    });
+  }
 
   // POST /capture
   app.post('/capture', async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    const { text, username = 'default' } = body;
+    const { text } = body;
+    // Use authenticated uid if available, fall back to body username for legacy mode
+    const username = c.get('auth')?.uid ?? body.username ?? 'default';
 
     if (!text || typeof text !== 'string') {
       return c.json({ error: 'text is required' }, 400);

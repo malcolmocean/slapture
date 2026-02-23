@@ -52,7 +52,8 @@ async function main() {
     sheetsAuthProvider = new FileSheetsAuthProvider();
   }
 
-  const app = await buildServer(storage, FILESTORE_DIR, ANTHROPIC_API_KEY, sheetsAuthProvider);
+  const useFirebaseAuth = STORAGE_BACKEND === 'firestore';
+  const app = await buildServer(storage, FILESTORE_DIR, ANTHROPIC_API_KEY, sheetsAuthProvider, useFirebaseAuth);
 
   serve({
     fetch: app.fetch,
