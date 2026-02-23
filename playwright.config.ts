@@ -1,19 +1,22 @@
 import { defineConfig } from '@playwright/test';
 
-const PORT = process.env.TEST_PORT || '4445';
+const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.TEST_PORT || '4445'}`;
 
 export default defineConfig({
   testDir: './tests/e2e',
   use: {
-    baseURL: `http://localhost:${PORT}`,
+    baseURL: BASE_URL,
   },
-  webServer: {
-    command: 'pnpm start',
-    url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
-    env: {
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || 'test-key',
-      PORT: PORT,
+  // Only start local server if not using external BASE_URL
+  ...(process.env.BASE_URL ? {} : {
+    webServer: {
+      command: 'pnpm start',
+      url: BASE_URL,
+      reuseExistingServer: !process.env.CI,
+      env: {
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || 'test-key',
+        PORT: process.env.TEST_PORT || '4445',
+      },
     },
-  },
+  }),
 });
