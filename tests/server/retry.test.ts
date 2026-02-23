@@ -14,6 +14,24 @@ vi.mock('@anthropic-ai/sdk', () => ({
   }
 }));
 
+// Mock Firebase auth to create a passthrough middleware for testing
+vi.mock('firebase-admin/auth', () => ({
+  getAuth: () => ({
+    verifyIdToken: vi.fn(),
+  }),
+}));
+
+vi.mock('../../src/server/auth.js', () => ({
+  createAuthMiddleware: () => async (c: any, next: any) => {
+    c.set('auth', { uid: 'default', email: 'test@test.com', authMethod: 'firebase' });
+    return next();
+  },
+}));
+
+vi.mock('../../src/server/api-keys.js', () => ({
+  buildApiKeyRoutes: () => {},
+}));
+
 describe('Retry Blocked Captures', () => {
   let app: Hono;
   let storage: Storage;
@@ -57,7 +75,6 @@ describe('Retry Blocked Captures', () => {
       retiredReason: null
     }, 'default');
 
-    // Need to save config with auth token for the auth middleware
     await storage.saveConfig({
       authToken: 'dev-token',
       requireApproval: false,
@@ -86,7 +103,7 @@ describe('Retry Blocked Captures', () => {
       json: async () => ({ id: 'intention-123', text: 'buy groceries' })
     });
 
-    const response = await app.request('/retry/blocked-capture-1?token=dev-token', { method: 'POST' });
+    const response = await app.request('/retry/blocked-capture-1', { method: 'POST' });
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -94,12 +111,12 @@ describe('Retry Blocked Captures', () => {
   });
 
   it('should return 404 for non-existent capture', async () => {
-    const response = await app.request('/retry/non-existent?token=dev-token', { method: 'POST' });
+    const response = await app.request('/retry/non-existent', { method: 'POST' });
     expect(response.status).toBe(404);
   });
 
   it('should list all blocked captures', async () => {
-    const response = await app.request('/captures/blocked?token=dev-token');
+    const response = await app.request('/captures/blocked');
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -124,7 +141,7 @@ describe('Retry Blocked Captures', () => {
       retiredReason: null
     }, 'default');
 
-    const response = await app.request('/retry/success-capture?token=dev-token', { method: 'POST' });
+    const response = await app.request('/retry/success-capture', { method: 'POST' });
 
     expect(response.status).toBe(400);
     const body = await response.json();

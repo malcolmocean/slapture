@@ -14,7 +14,6 @@ export async function buildServer(
   filestoreRoot: string,
   apiKey: string,
   sheetsAuthProvider?: SheetsAuthProvider,
-  useFirebaseAuth: boolean = false,
 ): Promise<Hono> {
   const app = new Hono();
 
@@ -27,85 +26,52 @@ export async function buildServer(
     projectId: process.env.FIREBASE_PROJECT_ID || '',
   };
 
-  // Public pages (Firebase auth mode only)
-  if (useFirebaseAuth) {
-    const { renderLandingPage } = await import('../pages/landing.js');
-    const { renderLoginPage } = await import('../pages/login.js');
-    const { renderSignupPage } = await import('../pages/signup.js');
+  // Public pages
+  const { renderLandingPage } = await import('../pages/landing.js');
+  const { renderLoginPage } = await import('../pages/login.js');
+  const { renderSignupPage } = await import('../pages/signup.js');
 
-    app.get('/', (c) => c.html(renderLandingPage()));
-    app.get('/login', (c) => c.html(renderLoginPage(firebaseConfig)));
-    app.get('/secret-signup', (c) => c.html(renderSignupPage(firebaseConfig)));
+  app.get('/', (c) => c.html(renderLandingPage()));
+  app.get('/login', (c) => c.html(renderLoginPage(firebaseConfig)));
+  app.get('/secret-signup', (c) => c.html(renderSignupPage(firebaseConfig)));
 
-    // Session endpoint for dashboard cookie auth
-    app.post('/api/session', async (c) => {
-      const { idToken, signup } = await c.req.json();
+  // Session endpoint for dashboard cookie auth
+  app.post('/api/session', async (c) => {
+    const { idToken, signup } = await c.req.json();
 
-      // Check if user exists — reject new accounts unless via signup page
-      const decoded = await getAuth().verifyIdToken(idToken);
-      const existingUser = await storage.getUser(decoded.uid);
-      if (!existingUser && !signup) {
-        return c.json({ error: 'No account found. Please sign up first.' }, 403);
-      }
+    // Check if user exists — reject new accounts unless via signup page
+    const decoded = await getAuth().verifyIdToken(idToken);
+    const existingUser = await storage.getUser(decoded.uid);
+    if (!existingUser && !signup) {
+      return c.json({ error: 'No account found. Please sign up first.' }, 403);
+    }
 
-      // Auto-create user on signup
-      if (!existingUser && signup) {
-        await storage.saveUser({
-          uid: decoded.uid,
-          email: decoded.email || '',
-          displayName: decoded.name || decoded.email?.split('@')[0] || 'User',
-          createdAt: new Date().toISOString(),
-          authProvider: decoded.firebase?.sign_in_provider === 'google.com' ? 'google' : 'email',
-        });
-      }
+    // Auto-create user on signup
+    if (!existingUser && signup) {
+      await storage.saveUser({
+        uid: decoded.uid,
+        email: decoded.email || '',
+        displayName: decoded.name || decoded.email?.split('@')[0] || 'User',
+        createdAt: new Date().toISOString(),
+        authProvider: decoded.firebase?.sign_in_provider === 'google.com' ? 'google' : 'email',
+      });
+    }
 
-      c.header('Set-Cookie', `__session=${idToken}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600`);
-      return c.json({ ok: true });
-    });
-  }
+    c.header('Set-Cookie', `__session=${idToken}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600`);
+    return c.json({ ok: true });
+  });
 
-  // Auth middleware
-  if (useFirebaseAuth) {
-    // Firebase Auth + API key middleware
-    const { createAuthMiddleware } = await import('./auth.js');
-    app.use('*', createAuthMiddleware(storage, {
-      publicPaths: ['/', '/login', '/secret-signup', '/widget', '/api/session'],
-    }));
-  } else {
-    // Legacy token-based auth for local development
-    app.use('*', async (c, next) => {
-      const pathname = new URL(c.req.url).pathname;
-
-      // Skip auth for widget
-      if (pathname === '/widget' || pathname.startsWith('/widget/')) {
-        return next();
-      }
-
-      // Skip auth for OAuth routes (public endpoints)
-      if (pathname.startsWith('/connect/') ||
-          pathname.startsWith('/oauth/') ||
-          pathname.startsWith('/auth/status/') ||
-          pathname.startsWith('/disconnect/')) {
-        return next();
-      }
-
-      const token = c.req.query('token');
-      const config = await storage.getConfig();
-
-      if (token !== config.authToken) {
-        return c.json({ error: 'Unauthorized' }, 401);
-      }
-
-      return next();
-    });
-  }
+  // Firebase Auth + API key middleware
+  const { createAuthMiddleware } = await import('./auth.js');
+  app.use('*', createAuthMiddleware(storage, {
+    publicPaths: ['/', '/login', '/secret-signup', '/widget', '/api/session'],
+  }));
 
   // POST /capture
   app.post('/capture', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const { text } = body;
-    // Use authenticated uid if available, fall back to body username for legacy mode
-    const username = c.get('auth')?.uid ?? body.username ?? 'default';
+    const username = c.get('auth')?.uid ?? 'default';
 
     if (!text || typeof text !== 'string') {
       return c.json({ error: 'text is required' }, 400);
@@ -206,11 +172,9 @@ export async function buildServer(
   // Dashboard routes
   buildDashboardRoutes(app, storage);
 
-  // API key management routes (only in Firebase auth mode)
-  if (useFirebaseAuth) {
-    const { buildApiKeyRoutes } = await import('./api-keys.js');
-    buildApiKeyRoutes(app, storage);
-  }
+  // API key management routes
+  const { buildApiKeyRoutes } = await import('./api-keys.js');
+  buildApiKeyRoutes(app, storage);
 
   return app;
 }

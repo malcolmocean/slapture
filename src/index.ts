@@ -52,8 +52,16 @@ async function main() {
     sheetsAuthProvider = new FileSheetsAuthProvider();
   }
 
-  const useFirebaseAuth = STORAGE_BACKEND === 'firestore';
-  const app = await buildServer(storage, FILESTORE_DIR, ANTHROPIC_API_KEY, sheetsAuthProvider, useFirebaseAuth);
+  // Initialize Firebase Admin SDK for local storage mode (Firestore mode already inits above)
+  if (STORAGE_BACKEND !== 'firestore') {
+    initializeApp({
+      credential: applicationDefault(),
+      projectId: process.env.FIREBASE_PROJECT_ID,
+    });
+    console.log('[Auth] Firebase Admin SDK initialized (local storage mode)');
+  }
+
+  const app = await buildServer(storage, FILESTORE_DIR, ANTHROPIC_API_KEY, sheetsAuthProvider);
 
   serve({
     fetch: app.fetch,

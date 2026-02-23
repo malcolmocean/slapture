@@ -1,10 +1,28 @@
 // tests/unit/server.test.ts
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { buildServer } from '../../src/server/index.js';
 import { Storage } from '../../src/storage/index.js';
 import { Route } from '../../src/types.js';
 import fs from 'fs';
 import type { Hono } from 'hono';
+
+// Mock Firebase auth to create a passthrough middleware for testing
+vi.mock('firebase-admin/auth', () => ({
+  getAuth: () => ({
+    verifyIdToken: vi.fn(),
+  }),
+}));
+
+vi.mock('../../src/server/auth.js', () => ({
+  createAuthMiddleware: () => async (c: any, next: any) => {
+    c.set('auth', { uid: 'test-user', email: 'test@test.com', authMethod: 'firebase' });
+    return next();
+  },
+}));
+
+vi.mock('../../src/server/api-keys.js', () => ({
+  buildApiKeyRoutes: () => {},
+}));
 
 const TEST_DATA_DIR = './test-server-data';
 const TEST_FILESTORE = './test-server-filestore';
@@ -47,18 +65,8 @@ describe('HTTP Server', () => {
   });
 
   describe('POST /capture', () => {
-    it('should require auth token', async () => {
+    it('should accept capture', async () => {
       const response = await app.request('/capture', {
-        method: 'POST',
-        body: JSON.stringify({ text: 'test' }),
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      expect(response.status).toBe(401);
-    });
-
-    it('should accept capture with valid token', async () => {
-      const response = await app.request('/capture?token=test-token', {
         method: 'POST',
         body: JSON.stringify({ text: 'dump: hello' }),
         headers: { 'Content-Type': 'application/json' },
@@ -70,7 +78,7 @@ describe('HTTP Server', () => {
     });
 
     it('should reject missing text', async () => {
-      const response = await app.request('/capture?token=test-token', {
+      const response = await app.request('/capture', {
         method: 'POST',
         body: JSON.stringify({}),
         headers: { 'Content-Type': 'application/json' },
@@ -82,14 +90,14 @@ describe('HTTP Server', () => {
 
   describe('GET /status/:captureId', () => {
     it('should return capture status', async () => {
-      const createResponse = await app.request('/capture?token=test-token', {
+      const createResponse = await app.request('/capture', {
         method: 'POST',
         body: JSON.stringify({ text: 'dump: test status' }),
         headers: { 'Content-Type': 'application/json' },
       });
       const { captureId } = await createResponse.json();
 
-      const statusResponse = await app.request(`/status/${captureId}?token=test-token`);
+      const statusResponse = await app.request(`/status/${captureId}`);
 
       expect(statusResponse.status).toBe(200);
       const status = await statusResponse.json();
@@ -97,14 +105,14 @@ describe('HTTP Server', () => {
     });
 
     it('should return 404 for unknown capture', async () => {
-      const response = await app.request('/status/nonexistent?token=test-token');
+      const response = await app.request('/status/nonexistent');
       expect(response.status).toBe(404);
     });
   });
 
   describe('GET /routes', () => {
     it('should list routes', async () => {
-      const response = await app.request('/routes?token=test-token');
+      const response = await app.request('/routes');
 
       expect(response.status).toBe(200);
       const routes = await response.json();
@@ -114,7 +122,7 @@ describe('HTTP Server', () => {
 
   describe('GET /captures', () => {
     it('should list recent captures', async () => {
-      const response = await app.request('/captures?token=test-token');
+      const response = await app.request('/captures');
 
       expect(response.status).toBe(200);
       const captures = await response.json();
