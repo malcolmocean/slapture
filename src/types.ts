@@ -359,3 +359,30 @@ export interface TriggerChangeReview {
     reasoning: string;
   }>;
 }
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  createdAt: string;  // ISO 8601
+  authProvider: 'email' | 'google';
+}
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  keyHash: string;
+  prefix: string;       // e.g. "slap_k_a1b2c3d4" or "slap_t_e5f6g7h8"
+  temporary: boolean;
+  createdAt: string;     // ISO 8601
+  expiresAt: string | null;  // null = never (permanent only)
+  lastUsedAt: string | null;
+  status: 'active' | 'revoked';
+}
+
+export interface AuthContext {
+  uid: string;
+  email: string;
+  authMethod: 'firebase' | 'api-key';
+  apiKeyId?: string;  // Set when authMethod is 'api-key'
+}
