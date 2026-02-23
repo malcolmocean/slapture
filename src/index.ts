@@ -1,6 +1,7 @@
 // src/index.ts
 import 'dotenv/config';
 import { serve } from '@hono/node-server';
+import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { buildServer } from './server/index.js';
 import { Storage } from './storage/index.js';
 import { FirestoreStorage } from './storage/firestore.js';
@@ -28,6 +29,13 @@ async function main() {
     console.log('[Storage] Using Firestore backend');
     const firestoreStorage = new FirestoreStorage();
     storage = firestoreStorage;
+
+    // Initialize Firebase Admin SDK
+    initializeApp({
+      credential: applicationDefault(),
+      projectId: process.env.FIREBASE_PROJECT_ID,
+    });
+    console.log('[Auth] Firebase Admin SDK initialized');
 
     const sheetsClientId = process.env.GOOGLE_SHEETS_CLIENT_ID || '';
     const sheetsClientSecret = process.env.GOOGLE_SHEETS_CLIENT_SECRET || '';
