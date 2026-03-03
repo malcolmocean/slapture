@@ -7,7 +7,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
   // Dashboard home
   app.get('/dashboard', async (c) => {
     const [captures, routes, blocked] = await Promise.all([
-      storage.listCaptures(10),
+      storage.listCaptures(10, c.get('auth')?.uid),
       storage.listRoutes(),
       storage.listCapturesNeedingAuth(c.get('auth')?.uid),
     ]);
@@ -68,7 +68,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     const page = parseInt(pageStr || '1', 10);
     const perPage = 25;
 
-    let captures = await storage.listAllCaptures();
+    let captures = await storage.listAllCaptures(c.get('auth')?.uid);
 
     // Filter by status
     if (status && status !== 'all') {
@@ -244,7 +244,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
   // Routes list
   app.get('/dashboard/routes', async (c) => {
     const routes = await storage.listRoutes();
-    const allCaptures = await storage.listAllCaptures();
+    const allCaptures = await storage.listAllCaptures(c.get('auth')?.uid);
 
     // Calculate stats for each route
     const routeStats = routes.map(route => {
@@ -310,7 +310,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       return c.html(layout('Not Found', '<h1>Route not found</h1>'), 404);
     }
 
-    const allCaptures = await storage.listAllCaptures();
+    const allCaptures = await storage.listAllCaptures(c.get('auth')?.uid);
     const routeCaptures = allCaptures.filter(c => c.routeFinal === route.id);
 
     const content = `
@@ -477,7 +477,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
                 <tr>
                   <td>${formatDate(c.timestamp)}</td>
                   <td class="text-truncate">${escapeHtml(c.raw)}</td>
-                  <td>${c.routeFinal || '-'}</td>
+                  <td>${escapeHtml(c.routeFinal || '-')}</td>
                   <td>${statusBadge(c.executionResult)}</td>
                   <td>
                     <a href="/dashboard/captures/${c.id}" class="btn btn-secondary">View</a>
@@ -591,7 +591,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
 
   // Test suite view
   app.get('/dashboard/test-suite', async (c) => {
-    const allCaptures = await storage.listAllCaptures();
+    const allCaptures = await storage.listAllCaptures(c.get('auth')?.uid);
 
     // Golden tests = human_verified captures that aren't retired
     const goldenTests = allCaptures.filter(c =>

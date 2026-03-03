@@ -170,6 +170,7 @@
       </div>
     </div>
     <a id="viewCaptureLink" class="view-capture-link" style="display: none;" target="_blank">View capture details →</a>
+    <a id="authLink" class="view-capture-link" style="display: none;" target="_blank">Connect integration →</a>
   </div>
 
   <script>
@@ -232,6 +233,7 @@
       submitBtn.disabled = true;
       statusDiv.classList.remove('hidden');
       document.getElementById('viewCaptureLink').style.display = 'none';
+      document.getElementById('authLink').style.display = 'none';
       resetStatus();
 
       try {
@@ -329,6 +331,7 @@
           setStepError('step-execute');
           setStepError('step-result', `Blocked — needs auth for ${capture.routeFinal || 'unknown'}`);
           showCaptureLink(captureId);
+          showAuthLink();
           return;
         }
 
@@ -369,6 +372,12 @@
     function showCaptureLink(captureId) {
       const link = document.getElementById('viewCaptureLink');
       link.href = `/dashboard/captures/${captureId}`;
+      link.style.display = 'block';
+    }
+
+    function showAuthLink() {
+      const link = document.getElementById('authLink');
+      link.href = '/dashboard/auth';
       link.style.display = 'block';
     }
 

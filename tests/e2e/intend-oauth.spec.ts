@@ -13,11 +13,14 @@ test.describe('intend.do OAuth Integration', () => {
     await loginAsTestUser(page);
   });
 
-  test.afterEach(async () => {
-    // Log created capture IDs for manual cleanup if needed
-    if (createdCaptureIds.length > 0) {
-      console.log(`[intend-oauth] Test created capture IDs: ${createdCaptureIds.join(', ')}`);
+  test.afterEach(async ({ page }) => {
+    // No delete capture API exists, so clean up by retrying (which updates status)
+    // or log for manual cleanup. For now, attempt to delete via dashboard if possible.
+    for (const id of createdCaptureIds) {
+      // Best effort: log for manual cleanup since no DELETE /capture/:id endpoint exists
+      console.log(`[intend-oauth cleanup] Capture ${id} created by test — delete manually if needed`);
     }
+    createdCaptureIds.length = 0;
   });
 
   test('complete OAuth flow and route intention capture', async ({ page }) => {
