@@ -1,5 +1,5 @@
 // src/storage/interface.ts
-import type { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, TriggerChangeReview, UserProfile, ApiKey } from '../types.js';
+import type { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, SheetsTokens, TriggerChangeReview, UserProfile, ApiKey } from '../types.js';
 import type { HygieneSignal } from '../hygiene/index.js';
 
 export interface StorageInterface {
@@ -38,6 +38,10 @@ export interface StorageInterface {
   saveIntendTokens(username: string, tokens: IntendTokens): Promise<void>;
   getIntendTokens(username: string): Promise<IntendTokens | null>;
   clearIntendTokens(username: string): Promise<void>;
+
+  saveSheetsTokens(username: string, tokens: SheetsTokens): Promise<void>;
+  getSheetsTokens(username: string): Promise<SheetsTokens | null>;
+  clearSheetsTokens(username: string): Promise<void>;
 
   // Integration notes
   getIntegrationNote(username: string, integrationId: string): Promise<string | null>;

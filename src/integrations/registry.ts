@@ -82,6 +82,9 @@ export async function getIntegrationsWithStatus(
           status = 'connected';
         }
       }
+    } else if (integration.id === 'sheets') {
+      const tokens = await storage.getSheetsTokens(username);
+      status = tokens ? 'connected' : 'never';
     } else {
       // Default for unknown oauth/api-key integrations
       status = 'never';

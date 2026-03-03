@@ -254,6 +254,11 @@ export interface IntendTokens {
   baseUrl: string;
 }
 
+export interface SheetsTokens {
+  accessToken: string;
+  refreshToken: string;
+}
+
 export interface Integration {
   id: string;                    // 'intend', 'fs', 'notes'
   name: string;                  // 'intend.do', 'Local Files', 'Notes'
@@ -263,6 +268,7 @@ export interface Integration {
 
 export interface IntegrationConfig {
   intend?: IntendTokens;
+  sheets?: SheetsTokens;
 }
 
 export interface Config {

@@ -1,7 +1,7 @@
 // src/storage/firestore.ts
 import { Firestore } from '@google-cloud/firestore';
 import type { StorageInterface } from './interface.js';
-import type { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, TriggerChangeReview, UserProfile, ApiKey } from '../types.js';
+import type { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, SheetsTokens, TriggerChangeReview, UserProfile, ApiKey } from '../types.js';
 import type { HygieneSignal } from '../hygiene/index.js';
 
 export class FirestoreStorage implements StorageInterface {
@@ -183,6 +183,30 @@ export class FirestoreStorage implements StorageInterface {
     const data = doc.data() || {};
     if (data.integrations) {
       delete data.integrations.intend;
+      await this.db.collection('users').doc(username).set(data);
+    }
+  }
+
+  async saveSheetsTokens(username: string, tokens: SheetsTokens): Promise<void> {
+    await this.db.collection('users').doc(username).set(
+      { integrations: { sheets: tokens } },
+      { merge: true }
+    );
+  }
+
+  async getSheetsTokens(username: string): Promise<SheetsTokens | null> {
+    const doc = await this.db.collection('users').doc(username).get();
+    if (!doc.exists) return null;
+    const data = doc.data();
+    return data?.integrations?.sheets || null;
+  }
+
+  async clearSheetsTokens(username: string): Promise<void> {
+    const doc = await this.db.collection('users').doc(username).get();
+    if (!doc.exists) return;
+    const data = doc.data() || {};
+    if (data.integrations) {
+      delete data.integrations.sheets;
       await this.db.collection('users').doc(username).set(data);
     }
   }

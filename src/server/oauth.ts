@@ -7,6 +7,8 @@ export interface OAuthConfig {
   intendClientSecret?: string;
   intendBaseUrl: string;
   callbackBaseUrl: string;
+  sheetsClientId?: string;
+  sheetsClientSecret?: string;
 }
 
 interface DynamicClientCredentials {
@@ -220,6 +222,141 @@ export function buildOAuthRoutes(
     }
     return c.json({ success: true });
   });
+
+  // --- Google Sheets OAuth ---
+
+  app.get('/connect/sheets', async (c) => {
+    const auth = c.get('auth');
+    if (!auth?.uid) {
+      return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    if (!config.sheetsClientId || !config.sheetsClientSecret) {
+      return c.json({ error: 'Google Sheets OAuth not configured' }, 500);
+    }
+
+    const user = auth.uid;
+    const redirectUri = `${config.callbackBaseUrl}/oauth/callback/sheets`;
+    const authorizeUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authorizeUrl.searchParams.set('client_id', config.sheetsClientId);
+    authorizeUrl.searchParams.set('redirect_uri', redirectUri);
+    authorizeUrl.searchParams.set('response_type', 'code');
+    authorizeUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/spreadsheets');
+    authorizeUrl.searchParams.set('access_type', 'offline');
+    authorizeUrl.searchParams.set('prompt', 'consent');
+
+    const csrf = generateCsrf();
+    const state = encodeState(user, csrf);
+    authorizeUrl.searchParams.set('state', state);
+
+    return c.redirect(authorizeUrl.toString());
+  });
+
+  app.get('/oauth/callback/sheets', async (c) => {
+    const code = c.req.query('code');
+    const state = c.req.query('state');
+    const error = c.req.query('error');
+
+    if (error) {
+      const detail = encodeURIComponent(c.req.query('error_description') || error);
+      return c.redirect(`/oauth/error?reason=google_denied&detail=${detail}`);
+    }
+
+    if (!code) {
+      return c.json({ error: 'Missing authorization code' }, 400);
+    }
+
+    if (!state) {
+      return c.json({ error: 'Missing state parameter' }, 400);
+    }
+
+    const decodedState = decodeState(state);
+    if (decodedState.error === 'invalid_state') {
+      return c.json({ error: 'Invalid state parameter' }, 400);
+    }
+    if (decodedState.error === 'missing_user' || !decodedState.user) {
+      return c.json({ error: 'Missing user in state parameter' }, 400);
+    }
+
+    const { user } = decodedState;
+
+    try {
+      const redirectUri = `${config.callbackBaseUrl}/oauth/callback/sheets`;
+      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: redirectUri,
+          client_id: config.sheetsClientId!,
+          client_secret: config.sheetsClientSecret!,
+        }),
+      });
+
+      if (!tokenResponse.ok) {
+        const errorText = await tokenResponse.text();
+        console.error('[OAuth/Sheets] Token exchange failed:', tokenResponse.status, errorText);
+        const detail = encodeURIComponent(`${tokenResponse.status}: ${errorText}`);
+        return c.redirect(`/oauth/error?reason=token_exchange_failed&detail=${detail}`);
+      }
+
+      const tokens = await tokenResponse.json() as {
+        access_token: string;
+        refresh_token: string;
+      };
+
+      await storage.saveSheetsTokens(user, {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+      });
+
+      console.log(`[OAuth/Sheets] Google Sheets connected successfully for user: ${user}`);
+      return c.redirect('/dashboard/auth');
+    } catch (err) {
+      console.error('[OAuth/Sheets] Error during token exchange:', err);
+      const detail = encodeURIComponent(err instanceof Error ? err.message : String(err));
+      return c.redirect(`/oauth/error?reason=internal_error&detail=${detail}`);
+    }
+  });
+
+  app.get('/auth/status/sheets', async (c) => {
+    const auth = c.get('auth');
+    if (!auth?.uid) {
+      return c.json({ error: 'Authentication required' }, 401);
+    }
+    const user = auth.uid;
+
+    const tokens = await storage.getSheetsTokens(user);
+    const connected = tokens !== null;
+    const blockedCaptures = await storage.listCapturesNeedingAuth(user);
+
+    return c.json({
+      connected,
+      blockedCaptureCount: blockedCaptures.filter(c =>
+        c.routeFinal && c.routeFinal.includes('sheets')
+      ).length,
+    });
+  });
+
+  app.post('/disconnect/sheets', async (c) => {
+    const auth = c.get('auth');
+    if (!auth?.uid) {
+      return c.json({ error: 'Authentication required' }, 401);
+    }
+    const user = auth.uid;
+
+    await storage.clearSheetsTokens(user);
+    console.log(`[OAuth/Sheets] Google Sheets disconnected for user: ${user}`);
+
+    const redirect = c.req.query('redirect');
+    if (redirect) {
+      return c.redirect(redirect);
+    }
+    return c.json({ success: true });
+  });
+
+  // --- Shared OAuth pages ---
 
   app.get('/oauth/success', async (c) => {
     const integration = c.req.query('integration');
