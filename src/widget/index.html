@@ -325,6 +325,11 @@
           setStepDone('step-result', 'Sent to inbox');
           showCaptureLink(captureId);
           return;
+        } else if (capture.executionResult === 'blocked_needs_auth' || capture.executionResult === 'blocked_auth_expired') {
+          setStepError('step-execute');
+          setStepError('step-result', `Blocked — needs auth for ${capture.routeFinal || 'unknown'}`);
+          showCaptureLink(captureId);
+          return;
         }
 
         attempts++;

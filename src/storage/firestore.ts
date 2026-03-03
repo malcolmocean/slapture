@@ -67,8 +67,8 @@ export class FirestoreStorage implements StorageInterface {
     return snapshot.docs.map(doc => doc.data() as Capture);
   }
 
-  async listCapturesNeedingAuth(): Promise<Capture[]> {
-    const captures = await this.listAllCaptures();
+  async listCapturesNeedingAuth(username?: string): Promise<Capture[]> {
+    const captures = await this.listAllCaptures(username);
     return captures.filter(c =>
       c.executionResult === 'blocked_needs_auth' ||
       c.executionResult === 'blocked_auth_expired'

@@ -9,7 +9,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     const [captures, routes, blocked] = await Promise.all([
       storage.listCaptures(10),
       storage.listRoutes(),
-      storage.listCapturesNeedingAuth(),
+      storage.listCapturesNeedingAuth(c.get('auth')?.uid),
     ]);
 
     const content = `
@@ -412,7 +412,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
   app.get('/dashboard/auth', async (c) => {
     const auth = c.get('auth');
     const integrations = await getIntegrationsWithStatus(storage, auth.uid);
-    const blocked = await storage.listCapturesNeedingAuth();
+    const blocked = await storage.listCapturesNeedingAuth(auth.uid);
 
     const statusBadgeMap: Record<string, string> = {
       connected: 'badge-success',
@@ -467,6 +467,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
               <tr>
                 <th>Time</th>
                 <th>Input</th>
+                <th>Route</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -476,6 +477,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
                 <tr>
                   <td>${formatDate(c.timestamp)}</td>
                   <td class="text-truncate">${escapeHtml(c.raw)}</td>
+                  <td>${c.routeFinal || '-'}</td>
                   <td>${statusBadge(c.executionResult)}</td>
                   <td>
                     <a href="/dashboard/captures/${c.id}" class="btn btn-secondary">View</a>

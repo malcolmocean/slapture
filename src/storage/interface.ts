@@ -9,7 +9,7 @@ export interface StorageInterface {
   updateCapture(capture: Capture): Promise<void>;
   listCaptures(limit?: number, username?: string): Promise<Capture[]>;
   listAllCaptures(username?: string): Promise<Capture[]>;
-  listCapturesNeedingAuth(): Promise<Capture[]>;
+  listCapturesNeedingAuth(username?: string): Promise<Capture[]>;
 
   // Routes
   saveRoute(route: Route): Promise<void>;

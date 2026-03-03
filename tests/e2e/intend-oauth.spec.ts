@@ -4,10 +4,20 @@ import { loginAsTestUser } from './helpers/auth.js';
 const TEST_INTEND_USERNAME = 'qtess';
 const TEST_INTEND_PASSWORD = 'q';
 
+// NOTE: This test creates real captures in Firestore. It should only be run
+// against test accounts. Capture IDs are tracked for potential cleanup.
 test.describe('intend.do OAuth Integration', () => {
+  const createdCaptureIds: string[] = [];
 
   test.beforeEach(async ({ page }) => {
     await loginAsTestUser(page);
+  });
+
+  test.afterEach(async () => {
+    // Log created capture IDs for manual cleanup if needed
+    if (createdCaptureIds.length > 0) {
+      console.log(`[intend-oauth] Test created capture IDs: ${createdCaptureIds.join(', ')}`);
+    }
   });
 
   test('complete OAuth flow and route intention capture', async ({ page }) => {
@@ -49,6 +59,7 @@ test.describe('intend.do OAuth Integration', () => {
     });
     expect(response.ok()).toBeTruthy();
     const result = await response.json();
+    if (result.captureId) createdCaptureIds.push(result.captureId);
     expect(result.status).toBe('success');
   });
 
@@ -63,6 +74,8 @@ test.describe('intend.do OAuth Integration', () => {
         data: { text },
       });
       expect(response.ok()).toBeTruthy();
+      const result = await response.json();
+      if (result.captureId) createdCaptureIds.push(result.captureId);
     }
   });
 });

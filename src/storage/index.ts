@@ -325,8 +325,8 @@ export class Storage implements StorageInterface {
   }
 
   // List captures blocked on authentication
-  async listCapturesNeedingAuth(): Promise<Capture[]> {
-    const captures = await this.listAllCaptures();
+  async listCapturesNeedingAuth(username?: string): Promise<Capture[]> {
+    const captures = await this.listAllCaptures(username);
     return captures.filter(c =>
       c.executionResult === 'blocked_needs_auth' ||
       c.executionResult === 'blocked_auth_expired'
