@@ -63,7 +63,8 @@ export function layout(title: string, content: string): string {
     }
     .btn-primary { background: #007aff; color: white; }
     .btn-secondary { background: #6c757d; color: white; }
-    .btn-danger { background: #dc3545; color: white; }
+    .btn-danger { background: #6c757d; color: white; }
+    .btn-danger:hover { background: #dc3545; }
     .btn:hover { opacity: 0.9; }
     .filter-bar {
       display: flex;
@@ -92,7 +93,7 @@ export function layout(title: string, content: string): string {
 </head>
 <body>
   <nav>
-    <span class="logo">Slapture</span>
+    <a href="/widget" class="logo">Slapture</a>
     <a href="/dashboard">Home</a>
     <a href="/dashboard/captures">Captures</a>
     <a href="/dashboard/routes">Routes</a>

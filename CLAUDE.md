@@ -34,7 +34,9 @@ Description: First novel input triggers "I see you want to log gwen memories - i
 - do test-driven development
 - always run tests before concluding things are good, not just the build step!
   - run E2E tests too, not just unit tests
-- **NEVER claim a bug is fixed without verifying through Playwright E2E against the running server.** Unit tests and direct function calls are NOT sufficient — they bypass the HTTP layer, auth, Firestore, and the widget UI. If a user reports a bug through the widget, your verification MUST go through the widget (Playwright). A passing unit test does not mean the bug is fixed.
+- **NEVER claim a bug is fixed without verifying through Playwright E2E against the running server.**
+  - Unit tests and direct function calls are NOT sufficient — they bypass the HTTP layer, auth, Firestore, and the widget UI. If a user reports a bug through the widget, your verification MUST go through the widget (Playwright). A passing unit test does not mean the bug is fixed.
+  - imagine that you're a human developer, and you get assigned to fix a bug described in terms of the end-user experience. you need to go and test the actual end-user flow just like the person who assigned it to you did/will! and playwright is your tool for this
 - if you're executing a plan and you've thoroughly tested it, go ahead and commit
 - use your superpowers
   - prefer subagent-driven execution

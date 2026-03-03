@@ -115,6 +115,17 @@
     .dashboard-link:hover {
       color: #333;
     }
+    .view-capture-link {
+      display: block;
+      margin-top: 12px;
+      text-align: center;
+      font-size: 14px;
+      color: #007aff;
+      text-decoration: none;
+    }
+    .view-capture-link:hover {
+      text-decoration: underline;
+    }
   </style>
   <script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-auth-compat.js"></script>
@@ -158,6 +169,7 @@
         <span class="result-text"></span>
       </div>
     </div>
+    <a id="viewCaptureLink" class="view-capture-link" style="display: none;" target="_blank">View capture details →</a>
   </div>
 
   <script>
@@ -198,7 +210,7 @@
     input.disabled = true;
     submitBtn.disabled = true;
 
-    input.addEventListener('keypress', (e) => {
+    input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') submitCapture();
     });
 
@@ -219,6 +231,7 @@
 
       submitBtn.disabled = true;
       statusDiv.classList.remove('hidden');
+      document.getElementById('viewCaptureLink').style.display = 'none';
       resetStatus();
 
       try {
@@ -300,14 +313,17 @@
         if (capture.executionResult === 'success') {
           setStepDone('step-execute');
           setStepDone('step-result', `✓ ${capture.routeDisplayName || capture.routeFinal || 'destination'}`);
+          showCaptureLink(captureId);
           return;
         } else if (capture.executionResult === 'failed') {
           setStepError('step-execute');
           setStepError('step-result', 'Failed');
+          showCaptureLink(captureId);
           return;
         } else if (capture.executionResult === 'rejected') {
           setStepDone('step-execute');
           setStepDone('step-result', 'Sent to inbox');
+          showCaptureLink(captureId);
           return;
         }
 
@@ -343,6 +359,12 @@
       if (text) {
         el.querySelector('span:last-child').textContent = text;
       }
+    }
+
+    function showCaptureLink(captureId) {
+      const link = document.getElementById('viewCaptureLink');
+      link.href = `/dashboard/captures/${captureId}`;
+      link.style.display = 'block';
     }
 
     function setStepError(stepId, text) {

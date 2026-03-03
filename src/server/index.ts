@@ -193,7 +193,10 @@ export async function buildServer(
       return c.text(`Widget not found at ${widgetPath}`, 404);
     }
 
-    const html = fs.readFileSync(widgetPath, 'utf-8');
+    let html = fs.readFileSync(widgetPath, 'utf-8');
+    // Inject Firebase config so the client SDK can initialize
+    const configTag = `<meta name="firebase-config" content='${JSON.stringify(firebaseConfig)}'>`;
+    html = html.replace('</head>', `  ${configTag}\n</head>`);
     return c.html(html);
   });
 
