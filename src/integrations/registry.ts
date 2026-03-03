@@ -4,7 +4,7 @@ import type { StorageInterface } from '../storage/interface.js';
 
 export type { Integration };
 
-export type AuthStatus = 'connected' | 'expired' | 'not-connected';
+export type AuthStatus = 'connected' | 'expired' | 'never';
 
 export interface IntegrationWithStatus extends Integration {
   status: AuthStatus;
@@ -55,7 +55,7 @@ export function getIntegration(id: string): Integration | undefined {
  * Status meanings:
  * - 'connected': Auth is valid (tokens exist and not expired, or authType is 'none')
  * - 'expired': Tokens exist but have expired
- * - 'not-connected': No tokens exist
+ * - 'never': No tokens exist
  */
 export async function getIntegrationsWithStatus(
   storage: StorageInterface,
@@ -73,7 +73,7 @@ export async function getIntegrationsWithStatus(
       // Check intend.do OAuth tokens
       const tokens = await storage.getIntendTokens(username);
       if (!tokens) {
-        status = 'not-connected';
+        status = 'never';
       } else {
         const expiresAt = new Date(tokens.expiresAt);
         if (expiresAt.getTime() < Date.now()) {
@@ -84,7 +84,7 @@ export async function getIntegrationsWithStatus(
       }
     } else {
       // Default for unknown oauth/api-key integrations
-      status = 'not-connected';
+      status = 'never';
     }
 
     result.push({

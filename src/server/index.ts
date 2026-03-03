@@ -31,7 +31,20 @@ export async function buildServer(
   const { renderLoginPage } = await import('../pages/login.js');
   const { renderSignupPage } = await import('../pages/signup.js');
 
-  app.get('/', (c) => c.html(renderLandingPage()));
+  app.get('/', async (c) => {
+    // Redirect to widget if already logged in
+    const cookieHeader = c.req.header('Cookie');
+    const sessionMatch = cookieHeader?.match(/(?:^|;\s*)__session=([^;]+)/);
+    if (sessionMatch) {
+      try {
+        await getAuth().verifySessionCookie(sessionMatch[1], true);
+        return c.redirect('/widget');
+      } catch {
+        // Invalid/expired cookie, show landing page
+      }
+    }
+    return c.html(renderLandingPage());
+  });
   app.get('/login', (c) => c.html(renderLoginPage(firebaseConfig)));
   app.get('/secret-signup', (c) => c.html(renderSignupPage(firebaseConfig)));
 
@@ -63,7 +76,7 @@ export async function buildServer(
       const sessionCookie = await getAuth().createSessionCookie(idToken, { expiresIn });
       const isSecure = (process.env.NODE_ENV === 'production' || process.env.CALLBACK_BASE_URL?.startsWith('https'));
       const secureFlag = isSecure ? ' Secure;' : '';
-      c.header('Set-Cookie', `__session=${sessionCookie}; HttpOnly;${secureFlag} SameSite=Strict; Path=/; Max-Age=${expiresIn / 1000}`);
+      c.header('Set-Cookie', `__session=${sessionCookie}; HttpOnly;${secureFlag} SameSite=Lax; Path=/; Max-Age=${expiresIn / 1000}`);
       return c.json({ ok: true });
     } catch (error) {
       console.error('[Session] Failed to create session:', error);
@@ -80,47 +93,58 @@ export async function buildServer(
 
   // POST /capture
   app.post('/capture', async (c) => {
-    const body = await c.req.json().catch(() => ({}));
-    const { text } = body;
-    const username = c.get('auth')?.uid ?? 'default';
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const { text } = body;
+      const username = c.get('auth')?.uid ?? 'default';
 
-    if (!text || typeof text !== 'string') {
-      return c.json({ error: 'text is required' }, 400);
+      if (!text || typeof text !== 'string') {
+        return c.json({ error: 'text is required' }, 400);
+      }
+
+      const result = await pipeline.process(text, username);
+
+      return c.json({
+        captureId: result.capture.id,
+        status: result.capture.executionResult,
+        routeFinal: result.capture.routeFinal,
+        needsClarification: result.needsClarification,
+      });
+    } catch (error) {
+      console.error('[Capture] Error processing capture:', error);
+      return c.json({ error: 'Failed to process capture' }, 500);
     }
-
-    const result = await pipeline.process(text, username);
-
-    return c.json({
-      captureId: result.capture.id,
-      status: result.capture.executionResult,
-      routeFinal: result.capture.routeFinal,
-      needsClarification: result.needsClarification,
-    });
   });
 
   // GET /status/:captureId
   app.get('/status/:captureId', async (c) => {
-    const captureId = c.req.param('captureId');
+    try {
+      const captureId = c.req.param('captureId');
 
-    const capture = await storage.getCapture(captureId);
-    if (!capture) {
-      return c.json({ error: 'Capture not found' }, 404);
-    }
+      const username = c.get('auth')?.uid;
+      const capture = await storage.getCapture(captureId, username);
+      if (!capture) {
+        return c.json({ error: 'Capture not found' }, 404);
+      }
 
-    let routeDisplayName: string | null = null;
-    if (capture.routeFinal) {
-      const route = await storage.getRoute(capture.routeFinal);
-      if (route) {
-        if (route.destinationType === 'fs') {
-          const operation = route.transformScript?.includes('appendFileSync') ? 'append' : 'write';
-          routeDisplayName = `${operation}-${(route.destinationConfig as { filePath: string }).filePath}`;
-        } else {
-          routeDisplayName = `${route.destinationType}-${route.name}`;
+      let routeDisplayName: string | null = null;
+      if (capture.routeFinal) {
+        const route = await storage.getRoute(capture.routeFinal);
+        if (route) {
+          if (route.destinationType === 'fs') {
+            const operation = route.transformScript?.includes('appendFileSync') ? 'append' : 'write';
+            routeDisplayName = `${operation}-${(route.destinationConfig as { filePath: string }).filePath}`;
+          } else {
+            routeDisplayName = `${route.destinationType}-${route.name}`;
+          }
         }
       }
-    }
 
-    return c.json({ ...capture, routeDisplayName });
+      return c.json({ ...capture, routeDisplayName });
+    } catch (error) {
+      console.error('[Status] Error fetching capture status:', error);
+      return c.json({ error: 'Failed to fetch capture status' }, 500);
+    }
   });
 
   // GET /routes
@@ -142,8 +166,9 @@ export async function buildServer(
   // POST /retry/:captureId
   app.post('/retry/:captureId', async (c) => {
     const captureId = c.req.param('captureId');
+    const username = c.get('auth')?.uid;
 
-    const capture = await storage.getCapture(captureId);
+    const capture = await storage.getCapture(captureId, username);
     if (!capture) {
       return c.json({ error: 'Capture not found' }, 404);
     }

@@ -10,6 +10,7 @@ export class FirestoreStorage implements StorageInterface {
   constructor(projectId?: string) {
     this.db = new Firestore({
       projectId: projectId || process.env.FIREBASE_PROJECT_ID,
+      ignoreUndefinedProperties: true,
     });
   }
 
@@ -20,8 +21,12 @@ export class FirestoreStorage implements StorageInterface {
     await this.db.collection('captures').doc(username).collection('items').doc(docId).set(capture);
   }
 
-  async getCapture(id: string): Promise<Capture | null> {
-    const snapshot = await this.db.collectionGroup('items')
+  async getCapture(id: string, username?: string): Promise<Capture | null> {
+    // Query user's subcollection directly when username is known (avoids collection group index)
+    const collection = username
+      ? this.db.collection('captures').doc(username).collection('items')
+      : this.db.collectionGroup('items');
+    const snapshot = await collection
       .where('id', '==', id)
       .limit(1)
       .get();
@@ -31,7 +36,8 @@ export class FirestoreStorage implements StorageInterface {
   }
 
   async updateCapture(capture: Capture): Promise<void> {
-    const snapshot = await this.db.collectionGroup('items')
+    const username = capture.username || 'default';
+    const snapshot = await this.db.collection('captures').doc(username).collection('items')
       .where('id', '==', capture.id)
       .limit(1)
       .get();

@@ -5,7 +5,7 @@ import type { HygieneSignal } from '../hygiene/index.js';
 export interface StorageInterface {
   // Captures
   saveCapture(capture: Capture, username?: string): Promise<void>;
-  getCapture(id: string): Promise<Capture | null>;
+  getCapture(id: string, username?: string): Promise<Capture | null>;
   updateCapture(capture: Capture): Promise<void>;
   listCaptures(limit?: number, username?: string): Promise<Capture[]>;
   listAllCaptures(username?: string): Promise<Capture[]>;

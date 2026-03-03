@@ -191,14 +191,14 @@ describe('Mastermind', () => {
       expect(prompt).toContain('intend.do: Track daily intentions and goals [auth expired]');
     });
 
-    it('should include integrations with not-connected status', () => {
+    it('should include integrations with never status', () => {
       const integrations: IntegrationWithStatus[] = [
         {
           id: 'intend',
           name: 'intend.do',
           purpose: 'Track daily intentions and goals',
           authType: 'oauth',
-          status: 'not-connected',
+          status: 'never',
         },
       ];
 

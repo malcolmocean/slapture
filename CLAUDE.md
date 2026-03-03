@@ -28,21 +28,56 @@ Option 3: Ask immediately
 Description: First novel input triggers "I see you want to log gwen memories - is this a pattern you'll repeat?"
 ```
 
-## Dev tips 
-- use pnpm, not npm
+## Dev tips
+- use `pnpm`, not `npm`
+- `pnpm dev` for development (which runs `tsx watch` under the hood)
 - do test-driven development
 - always run tests before concluding things are good, not just the build step!
   - run E2E tests too, not just unit tests
+- **NEVER claim a bug is fixed without verifying through Playwright E2E against the running server.** Unit tests and direct function calls are NOT sufficient — they bypass the HTTP layer, auth, Firestore, and the widget UI. If a user reports a bug through the widget, your verification MUST go through the widget (Playwright). A passing unit test does not mean the bug is fixed.
 - if you're executing a plan and you've thoroughly tested it, go ahead and commit
 - use your superpowers
   - prefer subagent-driven execution
 - your tools, for security reasons, seemingly won't show the existence of a .env file. don't worry about it. it's there.
 - do your best to avoid running multiple commands at once (eg pnpm)
   - eg DON'T RUN THIS: pkill -f "node dist/index.js" 2>/dev/null; sleep 1; ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" pnpm start & timeout: 30s sleep 3
-  - and DON'T RUN THIS: cat > /tmp/test-prompt.ts << 'EOF'  [file contents]
+  - and DON'T RUN THIS: cat > ./tmp/test-prompt.ts << 'EOF'  [file contents]
 - relatedly, use actual temp scripts, since they work better for permissions
   - eg DON'T RUN THIS: pnpm tsx -e "..."
-    - instead, make the temporary script (you can make an untracked tmp/ folder) and then run it. if you need to make a specific un
+    - instead, make the temporary script in `./tmp` and then run it. if you need to make a specific
+- if you need to write to tmp, write to `./tmp` so you don't need to ask for permission to write to `/tmp`
+
+
+### Example of what it looks like when a totally trustable set of commands makes extra requests for permissions because it was made into one command:
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command                         
+                                         
+   pnpm dev > ./tmp/slapture.log 2>&1 &                          
+   sleep 3; curl -s http://localhost:4444/health
+   Start dev server with file watching
+         
+ Command contains newlines that could separate multiple commands
+
+ Do you want to proceed?                         
+ ❯ 1. Yes
+   2. No
+
+### Example of a permission getting blocked for silly reasons:
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command                            
+
+   pnpm dev > ./tmp/slapture-dev.log 2>&1 &                                   
+   Start dev server
+                        
+ Command contains output redirection (>) which could write to arbitrary files
+        
+ Do you want to proceed?
+ ❯ 1. Yes                                        
+   2. No
+
+
 
 ## Deployment
 

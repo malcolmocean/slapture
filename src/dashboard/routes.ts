@@ -151,7 +151,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
   app.get('/dashboard/captures/:captureId', async (c) => {
     const captureId = c.req.param('captureId');
 
-    const capture = await storage.getCapture(captureId);
+    const capture = await storage.getCapture(captureId, c.get('auth')?.uid);
     if (!capture) {
       return c.html(layout('Not Found', '<h1>Capture not found</h1>'), 404);
     }
@@ -230,7 +230,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
   app.post('/dashboard/captures/:captureId/verify', async (c) => {
     const captureId = c.req.param('captureId');
 
-    const capture = await storage.getCapture(captureId);
+    const capture = await storage.getCapture(captureId, c.get('auth')?.uid);
     if (!capture) {
       return c.json({ error: 'Capture not found' }, 404);
     }
@@ -410,14 +410,14 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
 
   // Auth status page
   app.get('/dashboard/auth', async (c) => {
-    // Get integrations with status for default user
-    const integrations = await getIntegrationsWithStatus(storage, 'default');
+    const auth = c.get('auth');
+    const integrations = await getIntegrationsWithStatus(storage, auth.uid);
     const blocked = await storage.listCapturesNeedingAuth();
 
     const statusBadgeMap: Record<string, string> = {
       connected: 'badge-success',
       expired: 'badge-danger',
-      'not-connected': 'badge-warning',
+      'never': 'badge-warning',
     };
 
     const content = `
@@ -495,7 +495,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
   app.get('/dashboard/captures/:captureId/correct', async (c) => {
     const captureId = c.req.param('captureId');
 
-    const capture = await storage.getCapture(captureId);
+    const capture = await storage.getCapture(captureId, c.get('auth')?.uid);
     if (!capture) {
       return c.html(layout('Not Found', '<h1>Capture not found</h1>'), 404);
     }
@@ -548,7 +548,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     const correctRoute = body.correctRoute;
     const reason = body.reason;
 
-    const capture = await storage.getCapture(captureId);
+    const capture = await storage.getCapture(captureId, c.get('auth')?.uid);
     if (!capture) {
       return c.json({ error: 'Capture not found' }, 404);
     }
@@ -654,7 +654,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
   app.post('/dashboard/captures/:captureId/retire', async (c) => {
     const captureId = c.req.param('captureId');
 
-    const capture = await storage.getCapture(captureId);
+    const capture = await storage.getCapture(captureId, c.get('auth')?.uid);
     if (!capture) {
       return c.json({ error: 'Capture not found' }, 404);
     }
@@ -856,7 +856,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
 
     // Process affected captures according to recommendations
     for (const affected of review.affectedCaptures) {
-      const capture = await storage.getCapture(affected.captureId);
+      const capture = await storage.getCapture(affected.captureId, c.get('auth')?.uid);
       if (!capture) continue;
 
       switch (affected.recommendation) {

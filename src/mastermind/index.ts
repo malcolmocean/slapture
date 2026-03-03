@@ -28,7 +28,7 @@ export class Mastermind {
         return '[connected]';
       case 'expired':
         return '[auth expired]';
-      case 'not-connected':
+      case 'never':
         return '[not connected]';
       default:
         return '';
@@ -131,18 +131,29 @@ Capture to process:
 
 Your options:
 1. Route to existing: {"action": "route", "routeId": "...", "reason": "..."}
-2. Create new route: {"action": "create", "route": {name, description, triggers: [{type: "regex", pattern, priority, status: "draft"}], destinationType: "fs", destinationConfig: {filePath}, transformScript, schema, createdBy: "mastermind"}, "reason": "..."}
+2. Create new route: {"action": "create", "route": {name, description, triggers: [{type: "regex", pattern, priority, status: "draft"}], destinationType, destinationConfig, transformScript, schema, createdBy: "mastermind"}, "reason": "..."}
 3. Need clarification: {"action": "clarify", "question": "...", "reason": "..."}
 4. Send to inbox: {"action": "inbox", "reason": "..."}
 
 IMPORTANT: New triggers should use status: "draft" (hypothesis). Draft triggers fire but don't auto-execute - they get validated first. After consistent successful fires (typically 2-4), they graduate to "live".
 
-For transformScript, you have access to: fs (sandboxed), payload, filePath, timestamp, metadata.
-Relative file paths in transformScript are resolved within the user's filestore directory.
+## Route destination types
+
+### "fs" - Local files
+destinationConfig: {filePath: "filename.csv"}
+transformScript has access to: fs (sandboxed), payload, filePath, timestamp, metadata.
+Relative file paths resolve within the user's filestore directory.
 Common patterns:
 - Append text: fs.appendFileSync(filePath, payload + '\\n')
 - JSON map: read, parse, update, write back
 - CSV append: fs.appendFileSync('filename.csv', timestamp.split('T')[0] + ',' + message + '\\n')
+
+### "notes" - Save notes about integrations or destinations
+destinationConfig: {target: "integration" | "destination", id: "<integrationId or routeName>"}
+No transformScript needed - the notes executor handles storage.
+Use target "integration" when the note is ABOUT an integration (e.g., "intend", "sheets", "fs").
+Use target "destination" when the note is ABOUT a specific route/destination.
+The "id" field is the integration ID (e.g., "intend") or the route name (e.g., "gwen_memories").
 
 When creating routes for "log X to Y" patterns:
 1. Extract the filename (e.g., "gwen_memories.csv")

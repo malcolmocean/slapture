@@ -10,7 +10,7 @@ export default defineConfig({
   // Only start local server if not using external BASE_URL
   ...(process.env.BASE_URL ? {} : {
     webServer: {
-      command: 'pnpm start',
+      command: 'pnpm dev',
       url: BASE_URL,
       reuseExistingServer: !process.env.CI,
       env: {

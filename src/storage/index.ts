@@ -53,7 +53,7 @@ export class Storage implements StorageInterface {
     fs.writeFileSync(filePath, JSON.stringify(capture, null, 2));
   }
 
-  async getCapture(id: string): Promise<Capture | null> {
+  async getCapture(id: string, _username?: string): Promise<Capture | null> {
     // Try legacy flat format first
     const legacyPath = path.join(this.dataDir, 'captures', `${id}.json`);
     if (fs.existsSync(legacyPath)) {

@@ -98,7 +98,7 @@ describe('Integration Registry', () => {
 
       // Each should have status field
       for (const integration of integrations) {
-        expect(['connected', 'expired', 'not-connected']).toContain(integration.status);
+        expect(['connected', 'expired', 'never']).toContain(integration.status);
       }
     });
 
@@ -114,10 +114,10 @@ describe('Integration Registry', () => {
       expect(notes?.status).toBe('connected');
     });
 
-    it('should return "not-connected" for intend when no tokens exist', async () => {
+    it('should return "never" for intend when no tokens exist', async () => {
       const integrations = await getIntegrationsWithStatus(storage, 'testuser');
       const intend = integrations.find(i => i.id === 'intend');
-      expect(intend?.status).toBe('not-connected');
+      expect(intend?.status).toBe('never');
     });
 
     it('should return "connected" for intend when valid tokens exist', async () => {
@@ -165,7 +165,7 @@ describe('Integration Registry', () => {
       const user2Intend = user2Integrations.find(i => i.id === 'intend');
 
       expect(user1Intend?.status).toBe('connected');
-      expect(user2Intend?.status).toBe('not-connected');
+      expect(user2Intend?.status).toBe('never');
     });
 
     it('should preserve all original integration properties', async () => {
