@@ -18,6 +18,8 @@ vi.mock('@anthropic-ai/sdk', () => ({
 vi.mock('firebase-admin/auth', () => ({
   getAuth: () => ({
     verifyIdToken: vi.fn(),
+    verifySessionCookie: vi.fn(),
+    createSessionCookie: vi.fn().mockResolvedValue('mock-session-cookie'),
   }),
 }));
 

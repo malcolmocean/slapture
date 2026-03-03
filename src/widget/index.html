@@ -169,6 +169,16 @@
       // Enable input once authenticated
       input.disabled = false;
       submitBtn.disabled = false;
+
+      // Silently refresh session cookie (Firebase session cookies max out at 14 days,
+      // so re-issue on each visit to keep the session rolling)
+      user.getIdToken().then(idToken =>
+        fetch('/api/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken }),
+        })
+      ).catch(() => {});
     });
 
     // Disable input until auth is confirmed

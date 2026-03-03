@@ -37,28 +37,39 @@ export async function buildServer(
 
   // Session endpoint for dashboard cookie auth
   app.post('/api/session', async (c) => {
-    const { idToken, signup } = await c.req.json();
+    try {
+      const { idToken, signup } = await c.req.json();
 
-    // Check if user exists — reject new accounts unless via signup page
-    const decoded = await getAuth().verifyIdToken(idToken);
-    const existingUser = await storage.getUser(decoded.uid);
-    if (!existingUser && !signup) {
-      return c.json({ error: 'No account found. Please sign up first.' }, 403);
+      // Check if user exists — reject new accounts unless via signup page
+      const decoded = await getAuth().verifyIdToken(idToken);
+      const existingUser = await storage.getUser(decoded.uid);
+      if (!existingUser && !signup) {
+        return c.json({ error: 'No account found. Please sign up first.' }, 403);
+      }
+
+      // Auto-create user on signup
+      if (!existingUser && signup) {
+        await storage.saveUser({
+          uid: decoded.uid,
+          email: decoded.email || '',
+          displayName: decoded.name || decoded.email?.split('@')[0] || 'User',
+          createdAt: new Date().toISOString(),
+          authProvider: decoded.firebase?.sign_in_provider === 'google.com' ? 'google' : 'email',
+        });
+      }
+
+      // Create a proper session cookie (lasts 14 days, survives server restarts)
+      const expiresIn = 14 * 24 * 60 * 60 * 1000; // 14 days
+      const sessionCookie = await getAuth().createSessionCookie(idToken, { expiresIn });
+      const isSecure = (process.env.NODE_ENV === 'production' || process.env.CALLBACK_BASE_URL?.startsWith('https'));
+      const secureFlag = isSecure ? ' Secure;' : '';
+      c.header('Set-Cookie', `__session=${sessionCookie}; HttpOnly;${secureFlag} SameSite=Strict; Path=/; Max-Age=${expiresIn / 1000}`);
+      return c.json({ ok: true });
+    } catch (error) {
+      console.error('[Session] Failed to create session:', error);
+      const message = error instanceof Error ? error.message : 'Session creation failed';
+      return c.json({ error: message }, 500);
     }
-
-    // Auto-create user on signup
-    if (!existingUser && signup) {
-      await storage.saveUser({
-        uid: decoded.uid,
-        email: decoded.email || '',
-        displayName: decoded.name || decoded.email?.split('@')[0] || 'User',
-        createdAt: new Date().toISOString(),
-        authProvider: decoded.firebase?.sign_in_provider === 'google.com' ? 'google' : 'email',
-      });
-    }
-
-    c.header('Set-Cookie', `__session=${idToken}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600`);
-    return c.json({ ok: true });
   });
 
   // Firebase Auth + API key middleware

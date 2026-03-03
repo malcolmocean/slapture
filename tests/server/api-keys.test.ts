@@ -5,7 +5,7 @@ import type { AuthContext } from '../../src/types.js';
 
 // Mock firebase-admin
 vi.mock('firebase-admin/auth', () => ({
-  getAuth: () => ({ verifyIdToken: vi.fn() }),
+  getAuth: () => ({ verifyIdToken: vi.fn(), verifySessionCookie: vi.fn(), createSessionCookie: vi.fn().mockResolvedValue('mock-session-cookie') }),
 }));
 
 describe('API key management endpoints', () => {

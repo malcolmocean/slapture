@@ -60,7 +60,7 @@ export function createAuthMiddleware(
     const sessionMatch = cookieHeader?.match(/(?:^|;\s*)__session=([^;]+)/);
     if (sessionMatch) {
       try {
-        const decoded = await getAuth().verifyIdToken(sessionMatch[1]);
+        const decoded = await getAuth().verifySessionCookie(sessionMatch[1], true);
         const authCtx: AuthContext = {
           uid: decoded.uid,
           email: decoded.email || '',

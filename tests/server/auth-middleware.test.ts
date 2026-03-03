@@ -6,6 +6,7 @@ import type { StorageInterface } from '../../src/storage/interface.js';
 vi.mock('firebase-admin/auth', () => ({
   getAuth: () => ({
     verifyIdToken: vi.fn(),
+    verifySessionCookie: vi.fn(),
   }),
 }));
 

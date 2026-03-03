@@ -110,7 +110,8 @@ export function buildOAuthRoutes(
       return c.redirect(authorizeUrl.toString());
     } catch (error) {
       console.error('[OAuth] Failed to initiate OAuth flow:', error);
-      return c.redirect('/oauth/error?reason=registration_failed');
+      const detail = encodeURIComponent(error instanceof Error ? error.message : String(error));
+      return c.redirect(`/oauth/error?reason=registration_failed&detail=${detail}`);
     }
   });
 
@@ -154,7 +155,8 @@ export function buildOAuthRoutes(
       if (!tokenResponse.ok) {
         const errorText = await tokenResponse.text();
         console.error('[OAuth] Token exchange failed:', tokenResponse.status, errorText);
-        return c.redirect('/oauth/error?reason=token_exchange_failed');
+        const detail = encodeURIComponent(`${tokenResponse.status}: ${errorText}`);
+        return c.redirect(`/oauth/error?reason=token_exchange_failed&detail=${detail}`);
       }
 
       const tokens = await tokenResponse.json() as {
@@ -176,7 +178,8 @@ export function buildOAuthRoutes(
       return c.redirect('/dashboard/auth');
     } catch (error) {
       console.error('[OAuth] Error during token exchange:', error);
-      return c.redirect('/oauth/error?reason=internal_error');
+      const detail = encodeURIComponent(error instanceof Error ? error.message : String(error));
+      return c.redirect(`/oauth/error?reason=internal_error&detail=${detail}`);
     }
   });
 
@@ -233,12 +236,14 @@ export function buildOAuthRoutes(
 
   app.get('/oauth/error', async (c) => {
     const reason = c.req.query('reason');
+    const detail = c.req.query('detail');
     return c.html(`
       <!DOCTYPE html>
       <html>
         <body style="font-family: sans-serif; text-align: center; padding: 50px;">
           <h1>Connection Failed</h1>
           <p>Reason: ${reason || 'unknown'}</p>
+          ${detail ? `<pre style="text-align: left; background: #f5f5f5; padding: 16px; border-radius: 8px; max-width: 600px; margin: 16px auto; overflow-x: auto; white-space: pre-wrap;">${detail}</pre>` : ''}
           <p><a href="/connect/intend">Try again</a></p>
         </body>
       </html>

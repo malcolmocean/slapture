@@ -506,36 +506,89 @@ export class Storage implements StorageInterface {
     }
   }
 
-  // User management (not supported in local mode)
-  async saveUser(_profile: UserProfile): Promise<void> {
-    throw new Error('User management requires Firestore backend');
+  // User management (local JSON file storage)
+  private ensureUsersDir(): string {
+    const dir = path.join(this.dataDir, 'users');
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return dir;
   }
-  async getUser(_uid: string): Promise<UserProfile | null> {
-    throw new Error('User management requires Firestore backend');
+
+  private getUserProfilePath(uid: string): string {
+    return path.join(this.ensureUsersDir(), `${uid}.json`);
   }
-  async saveApiKey(_uid: string, _key: ApiKey): Promise<void> {
-    throw new Error('API key management requires Firestore backend');
+
+  async saveUser(profile: UserProfile): Promise<void> {
+    fs.writeFileSync(this.getUserProfilePath(profile.uid), JSON.stringify(profile, null, 2));
   }
-  async listApiKeys(_uid: string): Promise<ApiKey[]> {
-    throw new Error('API key management requires Firestore backend');
+
+  async getUser(uid: string): Promise<UserProfile | null> {
+    const filePath = this.getUserProfilePath(uid);
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
   }
-  async getApiKey(_uid: string, _keyId: string): Promise<ApiKey | null> {
-    throw new Error('API key management requires Firestore backend');
+
+  // API key management (local JSON file storage)
+  private ensureApiKeysDir(uid: string): string {
+    const dir = path.join(this.dataDir, 'api-keys', uid);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return dir;
   }
-  async updateApiKey(_uid: string, _key: ApiKey): Promise<void> {
-    throw new Error('API key management requires Firestore backend');
+
+  async saveApiKey(uid: string, key: ApiKey): Promise<void> {
+    const filePath = path.join(this.ensureApiKeysDir(uid), `${key.id}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(key, null, 2));
   }
-  async deleteApiKey(_uid: string, _keyId: string): Promise<void> {
-    throw new Error('API key management requires Firestore backend');
+
+  async listApiKeys(uid: string): Promise<ApiKey[]> {
+    const dir = path.join(this.dataDir, 'api-keys', uid);
+    if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir)
+      .filter(f => f.endsWith('.json'))
+      .map(f => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8')));
   }
-  async saveApiKeyIndex(_keyHash: string, _uid: string, _keyId: string): Promise<void> {
-    throw new Error('API key index requires Firestore backend');
+
+  async getApiKey(uid: string, keyId: string): Promise<ApiKey | null> {
+    const filePath = path.join(this.dataDir, 'api-keys', uid, `${keyId}.json`);
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
   }
-  async getApiKeyIndex(_keyHash: string): Promise<{ uid: string; keyId: string } | null> {
-    throw new Error('API key index requires Firestore backend');
+
+  async updateApiKey(uid: string, key: ApiKey): Promise<void> {
+    await this.saveApiKey(uid, key);
   }
-  async deleteApiKeyIndex(_keyHash: string): Promise<void> {
-    throw new Error('API key index requires Firestore backend');
+
+  async deleteApiKey(uid: string, keyId: string): Promise<void> {
+    const filePath = path.join(this.dataDir, 'api-keys', uid, `${keyId}.json`);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  }
+
+  // API key index (local JSON file storage)
+  private ensureApiKeyIndexDir(): string {
+    const dir = path.join(this.dataDir, 'api-key-index');
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return dir;
+  }
+
+  async saveApiKeyIndex(keyHash: string, uid: string, keyId: string): Promise<void> {
+    const filePath = path.join(this.ensureApiKeyIndexDir(), `${keyHash}.json`);
+    fs.writeFileSync(filePath, JSON.stringify({ uid, keyId }, null, 2));
+  }
+
+  async getApiKeyIndex(keyHash: string): Promise<{ uid: string; keyId: string } | null> {
+    const filePath = path.join(this.dataDir, 'api-key-index', `${keyHash}.json`);
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  }
+
+  async deleteApiKeyIndex(keyHash: string): Promise<void> {
+    const filePath = path.join(this.dataDir, 'api-key-index', `${keyHash}.json`);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   }
 }
 
