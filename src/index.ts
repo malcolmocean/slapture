@@ -37,8 +37,8 @@ async function main() {
     });
     console.log('[Auth] Firebase Admin SDK initialized');
 
-    const sheetsClientId = process.env.GOOGLE_SHEETS_CLIENT_ID || '';
-    const sheetsClientSecret = process.env.GOOGLE_SHEETS_CLIENT_SECRET || '';
+    const sheetsClientId = process.env.GOOGLE_CLIENT_ID || '';
+    const sheetsClientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
     sheetsAuthProvider = new FirestoreSheetsAuthProvider(
       firestoreStorage.db,
       sheetsClientId,
