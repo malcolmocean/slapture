@@ -1,4 +1,5 @@
 // src/integrations/sheets/toolkit.ts
+import type { sheets_v4 } from 'googleapis';
 import type { SheetRef, GetValuesConfig, LookupConfig, LookupResult, SetCellConfig, AppendRowConfig, RecentActivityConfig, RecentActivityResult } from './types.js';
 
 /**
@@ -568,4 +569,33 @@ export async function getRecentActivity(
   });
 
   return results;
+}
+
+export interface CreateSpreadsheetResult {
+  spreadsheetId: string;
+  spreadsheetUrl: string;
+}
+
+/**
+ * Create a new Google Sheets spreadsheet.
+ * Takes the raw Sheets API client (not a SheetRef, since there's no spreadsheet yet).
+ */
+export async function createSpreadsheet(
+  client: sheets_v4.Sheets,
+  title: string,
+  sheetNames?: string[],
+): Promise<CreateSpreadsheetResult> {
+  const sheets = sheetNames?.map(name => ({ properties: { title: name } }));
+
+  const response = await client.spreadsheets.create({
+    requestBody: {
+      properties: { title },
+      ...(sheets ? { sheets } : {}),
+    },
+  });
+
+  const spreadsheetId = response.data.spreadsheetId!;
+  const spreadsheetUrl = response.data.spreadsheetUrl!;
+
+  return { spreadsheetId, spreadsheetUrl };
 }

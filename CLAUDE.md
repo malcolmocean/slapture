@@ -81,6 +81,15 @@ Description: First novel input triggers "I see you want to log gwen memories - i
 
 
 
+## OAuth Redirect URIs
+
+When giving instructions to set up a new OAuth redirect URI (Google, or any provider), always include all three environments:
+- `http://localhost:4444/oauth/callback/{provider}` (local dev)
+- `http://localhost:4445/oauth/callback/{provider}` (Playwright E2E tests)
+- `https://slapture.com/oauth/callback/{provider}` (production)
+
+The Google OAuth consent screen is in **Testing** mode — test users must be added manually.
+
 ## Deployment
 
 Deployed on Google Cloud Run (`slapture` service, `us-east1`).
