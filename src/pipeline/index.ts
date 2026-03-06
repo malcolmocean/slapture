@@ -370,10 +370,60 @@ export class CapturePipeline {
       }
     }
 
+    // Fetch spreadsheet context if Sheets is connected
+    const sheetsIntegration = integrations.find(i => i.id === 'sheets');
+    let sheetsContext: IntegrationContext['sheetsContext'];
+
+    if (sheetsIntegration?.status === 'connected') {
+      try {
+        const sheetsTokens = await this.storage.getSheetsTokens(username);
+        if (sheetsTokens) {
+          const { createDriveClient, createSheetsClient } = await import('../integrations/sheets/auth.js');
+          const { listSpreadsheets, inspectSpreadsheet } = await import('../integrations/sheets/toolkit.js');
+
+          const creds = {
+            clientId: process.env.GOOGLE_CLIENT_ID || '',
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+            accessToken: sheetsTokens.accessToken,
+            refreshToken: sheetsTokens.refreshToken,
+          };
+
+          const drive = createDriveClient(creds);
+          const sheetsClient = createSheetsClient(creds);
+          const spreadsheets = await listSpreadsheets(drive, { maxResults: 10 });
+
+          // Inspect top 5 for headers
+          const inspected = await Promise.all(
+            spreadsheets.slice(0, 5).map(async (ss) => {
+              try {
+                const inspection = await inspectSpreadsheet(sheetsClient, ss.id);
+                return {
+                  id: ss.id,
+                  name: ss.name,
+                  sheets: inspection.sheets.map(tab => ({
+                    name: tab.name,
+                    headers: tab.headers,
+                    sampleRow: tab.sampleRow,
+                  })),
+                };
+              } catch {
+                return { id: ss.id, name: ss.name, sheets: [] };
+              }
+            })
+          );
+
+          sheetsContext = { spreadsheets: inspected };
+        }
+      } catch (error) {
+        console.error('[Pipeline] Failed to fetch spreadsheet context:', error);
+      }
+    }
+
     return {
       integrations,
       integrationNotes,
       destinationNotes,
+      sheetsContext,
     };
   }
 
