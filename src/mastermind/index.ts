@@ -3,10 +3,23 @@ import { Route, ParseResult, MastermindAction } from '../types.js';
 import type { IntegrationWithStatus } from '../integrations/registry.js';
 import { MASTERMIND_PRINCIPLES } from './principles.js';
 
+export interface SheetsContextEntry {
+  id: string;
+  name: string;
+  sheets: Array<{
+    name: string;
+    headers: string[];
+    sampleRow: string[];
+  }>;
+}
+
 export interface IntegrationContext {
   integrations: IntegrationWithStatus[];
   integrationNotes: Map<string, string>;  // integrationId -> note content
   destinationNotes: Map<string, string>;  // destinationId -> note content
+  sheetsContext?: {
+    spreadsheets: SheetsContextEntry[];
+  };
 }
 
 export class Mastermind {
@@ -63,6 +76,20 @@ ${integrationLines.join('\n')}`;
 
 Your notes on integrations:
 ${noteLines.join('\n')}`;
+    }
+
+    // Add spreadsheet context for connected Sheets integration
+    if (context.sheetsContext?.spreadsheets.length) {
+      const sheetLines = context.sheetsContext.spreadsheets.map(ss => {
+        const tabSummaries = ss.sheets.map(tab => {
+          const headerStr = tab.headers.join(' | ');
+          const sampleStr = tab.sampleRow.length ? `\n      Sample: ${tab.sampleRow.join(' | ')}` : '';
+          return `    Tab "${tab.name}": ${headerStr}${sampleStr}`;
+        }).join('\n');
+        return `  - "${ss.name}" (id: ${ss.id})\n${tabSummaries}`;
+      }).join('\n');
+
+      section += `\n\nYour Google Sheets (recently accessed):\n${sheetLines}`;
     }
 
     section += `
@@ -154,6 +181,31 @@ No transformScript needed - the notes executor handles storage.
 Use target "integration" when the note is ABOUT an integration (e.g., "intend", "sheets", "fs").
 Use target "destination" when the note is ABOUT a specific route/destination.
 The "id" field is the integration ID (e.g., "intend") or the route name (e.g., "gwen_memories").
+
+### "sheets" - Google Sheets
+destinationConfig: {spreadsheetId: "<id from spreadsheet list>", sheetName: "<tab name>", operation: <operation>}
+No transformScript needed - the sheets executor handles everything declaratively.
+
+Operations:
+- append_row: Add a new row. Specify columns array.
+  operation: {type: "append_row", columns: [<ColumnSpec>, ...]}
+- lookup_set_cell: 2D lookup (find row + find column) then set cell value.
+  operation: {type: "lookup_set_cell", rowLookup: <LookupSpec>, colLookup: <LookupSpec>, value: <ValueSpec>}
+- lookup_append_to_row: Find row, write to first empty column in range.
+  operation: {type: "lookup_append_to_row", rowLookup: <LookupSpec>, colRange: [start, end], value: <ValueSpec>}
+
+ColumnSpec / ValueSpec types:
+- {type: "today", format?: "short"} — current date
+- {type: "payload"} — full parsed payload
+- {type: "extract", pattern: "<regex>", group?: 1} — regex capture from payload
+- {type: "computed", expression: "<arithmetic>"} — safe math eval
+- {type: "literal", value: <any>} — static value
+
+LookupSpec: {axis: "row"|"col", at: <index>, valueSource: <ValueSpec>, match: "exact"|"fuzzy"|"date", range?: [start, end]}
+
+Prefer Google Sheets over local CSV files when the user has Sheets connected and the data is tabular/structured.
+Use spreadsheet IDs from the "Your Google Sheets" list when a matching spreadsheet already exists.
+Inspect headers to determine the right operation and column mapping.
 
 When creating routes for "log X to Y" patterns:
 1. Extract the filename (e.g., "gwen_memories.csv")

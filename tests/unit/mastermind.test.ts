@@ -359,6 +359,84 @@ describe('Mastermind', () => {
       expect(prompt).toContain('The "notes" integration lets users save context about other integrations/destinations.');
     });
 
+    it('should include spreadsheet context for connected Sheets integration', () => {
+      const integrations: IntegrationWithStatus[] = [
+        {
+          id: 'sheets',
+          name: 'Google Sheets',
+          purpose: 'Capture data to Google Sheets',
+          authType: 'oauth',
+          status: 'connected',
+        },
+      ];
+
+      const context: IntegrationContext = {
+        integrations,
+        integrationNotes: new Map(),
+        destinationNotes: new Map(),
+        sheetsContext: {
+          spreadsheets: [
+            {
+              id: 'abc123',
+              name: 'Baby Memories',
+              sheets: [
+                { name: 'Sheet1', headers: ['Date', 'Memory', 'Who'], sampleRow: ['2026-01-01', 'First smile', 'Gwen'] },
+              ],
+            },
+            {
+              id: 'def456',
+              name: 'Malcolm Weight',
+              sheets: [
+                { name: 'Log', headers: ['Date', 'Weight (kg)', 'Notes'], sampleRow: ['2026-03-01', '85.2', ''] },
+              ],
+            },
+          ],
+        },
+      };
+
+      const prompt = mastermind.buildPrompt(
+        existingRoutes,
+        'baby smiled today',
+        { explicitRoute: null, payload: 'baby smiled today', metadata: {} },
+        'No match',
+        context
+      );
+
+      expect(prompt).toContain('Your Google Sheets (recently accessed)');
+      expect(prompt).toContain('Baby Memories');
+      expect(prompt).toContain('abc123');
+      expect(prompt).toContain('Date | Memory | Who');
+      expect(prompt).toContain('Malcolm Weight');
+    });
+
+    it('should not include spreadsheet context when Sheets not connected', () => {
+      const integrations: IntegrationWithStatus[] = [
+        {
+          id: 'sheets',
+          name: 'Google Sheets',
+          purpose: 'Capture data to Google Sheets',
+          authType: 'oauth',
+          status: 'never',
+        },
+      ];
+
+      const context: IntegrationContext = {
+        integrations,
+        integrationNotes: new Map(),
+        destinationNotes: new Map(),
+      };
+
+      const prompt = mastermind.buildPrompt(
+        existingRoutes,
+        'test',
+        { explicitRoute: null, payload: 'test', metadata: {} },
+        'No match',
+        context
+      );
+
+      expect(prompt).not.toContain('Your Google Sheets (recently accessed)');
+    });
+
     it('should work without integration context (backwards compatible)', () => {
       const prompt = mastermind.buildPrompt(
         existingRoutes,
@@ -370,6 +448,34 @@ describe('Mastermind', () => {
       expect(prompt).toContain('You are the Slapture Mastermind');
       expect(prompt).toContain('dump');
       expect(prompt).not.toContain('Available Integrations:');
+    });
+  });
+
+  describe('sheets destination docs in prompt', () => {
+    it('should include sheets destination type documentation', () => {
+      const prompt = mastermind.buildPrompt(
+        [],
+        'test',
+        { explicitRoute: null, payload: 'test', metadata: {} },
+        'No match'
+      );
+
+      expect(prompt).toContain('### "sheets" - Google Sheets');
+      expect(prompt).toContain('spreadsheetId');
+      expect(prompt).toContain('append_row');
+      expect(prompt).toContain('lookup_set_cell');
+      expect(prompt).toContain('lookup_append_to_row');
+    });
+
+    it('should instruct Mastermind to prefer Sheets over CSV when Sheets is connected', () => {
+      const prompt = mastermind.buildPrompt(
+        [],
+        'test',
+        { explicitRoute: null, payload: 'test', metadata: {} },
+        'No match'
+      );
+
+      expect(prompt).toContain('Prefer Google Sheets over local CSV');
     });
   });
 });
