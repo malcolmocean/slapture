@@ -64,6 +64,23 @@ test.describe('Capture Detail', () => {
     await expect(page.locator('text=Execution Trace')).toBeVisible();
   });
 
+  test('shows LLM interactions section for captures with LLM steps', async ({ page }) => {
+    // Create a capture that will trigger the mastermind (no explicit route match)
+    const res = await page.request.post(`/capture`, {
+      data: { text: 'completely novel input that matches nothing existing' },
+    });
+    const { captureId } = await res.json();
+
+    await page.goto(`/dashboard/captures/${captureId}`);
+
+    // The LLM Interactions section should appear (mastermind was invoked)
+    await expect(page.locator('text=LLM Interactions')).toBeVisible();
+    // Should show the Mastermind card
+    await expect(page.locator('.badge-mastermind')).toBeVisible();
+    // Should have collapsible raw sections
+    await expect(page.locator('details.llm-raw summary').first()).toBeVisible();
+  });
+
   test('can verify a capture as correct', async ({ page }) => {
     const res = await page.request.post(`/capture`, {
       data: { text: 'dump: verify me' },
