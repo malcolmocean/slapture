@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import type { StorageInterface } from '../storage/interface.js';
-import { layout, escapeHtml, formatDate, statusBadge, verificationBadge } from './templates.js';
+import { layout, escapeHtml, formatDate, statusBadge, verificationBadge, renderLlmInteractions } from './templates.js';
 import { getIntegrationsWithStatus } from '../integrations/registry.js';
 
 export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void {
@@ -217,6 +217,8 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
           </table>
         `}
       </div>
+
+      ${renderLlmInteractions(capture.executionTrace, '')}
 
       <p style="margin-top: 1rem;">
         <a href="/dashboard/captures">← Back to captures</a>
