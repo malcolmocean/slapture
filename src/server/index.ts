@@ -96,7 +96,11 @@ export async function buildServer(
     try {
       const body = await c.req.json().catch(() => ({}));
       const { text } = body;
-      const username = c.get('auth')?.uid ?? 'default';
+      const auth = c.get('auth');
+      if (!auth?.uid) {
+        return c.json({ error: 'Authentication required' }, 401);
+      }
+      const username = auth.uid;
 
       if (!text || typeof text !== 'string') {
         return c.json({ error: 'text is required' }, 400);
