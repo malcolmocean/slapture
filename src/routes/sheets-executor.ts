@@ -108,7 +108,7 @@ export class SheetsExecutor {
     const payload = capture.parsed?.payload || capture.raw;
 
     // Get sheets credentials
-    const sheet = await this.getSheetRef(config.spreadsheetId, config.sheetName);
+    const sheet = await this.getSheetRef(config.spreadsheetId, config.sheetName, capture.username);
     if (!sheet) {
       return {
         status: 'blocked_needs_auth',
@@ -130,9 +130,8 @@ export class SheetsExecutor {
     }
   }
 
-  private async getSheetRef(spreadsheetId: string, sheetName: string): Promise<SheetRef | null> {
-    // TODO: pass real userId through from capture context
-    const credentials = await this.authProvider.getCredentials('default');
+  private async getSheetRef(spreadsheetId: string, sheetName: string, userId: string): Promise<SheetRef | null> {
+    const credentials = await this.authProvider.getCredentials(userId);
     if (!credentials) {
       return null;
     }
