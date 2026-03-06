@@ -4,7 +4,7 @@ import type { StorageInterface } from '../storage/interface.js';
 
 export type { Integration };
 
-export type AuthStatus = 'connected' | 'expired' | 'never';
+export type AuthStatus = 'connected' | 'expired' | 'never' | 'unavailable';
 
 export interface IntegrationWithStatus extends Integration {
   status: AuthStatus;
@@ -66,7 +66,10 @@ export async function getIntegrationsWithStatus(
   for (const integration of INTEGRATIONS) {
     let status: AuthStatus;
 
-    if (integration.authType === 'none') {
+    if (integration.id === 'fs' && process.env.K_SERVICE) {
+      // Local filesystem not available on Cloud Run
+      status = 'unavailable';
+    } else if (integration.authType === 'none') {
       // Integrations that don't require auth are always connected
       status = 'connected';
     } else if (integration.id === 'intend') {

@@ -43,6 +43,8 @@ export class Mastermind {
         return '[auth expired]';
       case 'never':
         return '[not connected]';
+      case 'unavailable':
+        return '[not available in this environment]';
       default:
         return '';
     }
