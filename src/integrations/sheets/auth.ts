@@ -1,5 +1,5 @@
 // src/integrations/sheets/auth.ts
-import { google, sheets_v4 } from 'googleapis';
+import { google, sheets_v4, drive_v3 } from 'googleapis';
 import { readFileSync, existsSync } from 'fs';
 import type { SheetsAuthProvider, SheetsCredentials } from './types.js';
 
@@ -22,6 +22,18 @@ export function createSheetsClient(auth: SheetsAuth): sheets_v4.Sheets {
   });
 
   return google.sheets({ version: 'v4', auth: oauth2Client });
+}
+
+export function createDriveClient(auth: SheetsAuth): drive_v3.Drive {
+  const oauth2Client = new google.auth.OAuth2(
+    auth.clientId,
+    auth.clientSecret
+  );
+  oauth2Client.setCredentials({
+    access_token: auth.accessToken,
+    refresh_token: auth.refreshToken,
+  });
+  return google.drive({ version: 'v3', auth: oauth2Client });
 }
 
 /**

@@ -1,5 +1,5 @@
 // src/integrations/sheets/toolkit.ts
-import type { sheets_v4 } from 'googleapis';
+import type { sheets_v4, drive_v3 } from 'googleapis';
 import type { SheetRef, GetValuesConfig, LookupConfig, LookupResult, SetCellConfig, AppendRowConfig, RecentActivityConfig, RecentActivityResult } from './types.js';
 
 /**
@@ -598,4 +598,68 @@ export async function createSpreadsheet(
   const spreadsheetUrl = response.data.spreadsheetUrl!;
 
   return { spreadsheetId, spreadsheetUrl };
+}
+
+export interface SpreadsheetSummary {
+  id: string;
+  name: string;
+}
+
+export interface SpreadsheetInspection {
+  title: string;
+  sheets: Array<{
+    name: string;
+    headers: string[];
+    sampleRow: string[];
+    rowCount: number;
+  }>;
+}
+
+export async function listSpreadsheets(
+  drive: drive_v3.Drive,
+  opts?: { maxResults?: number }
+): Promise<SpreadsheetSummary[]> {
+  const response = await drive.files.list({
+    q: "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
+    fields: 'files(id, name)',
+    orderBy: 'modifiedTime desc',
+    pageSize: opts?.maxResults ?? 10,
+  });
+  return (response.data.files ?? []).map(f => ({
+    id: f.id!,
+    name: f.name!,
+  }));
+}
+
+export async function inspectSpreadsheet(
+  client: sheets_v4.Sheets,
+  spreadsheetId: string
+): Promise<SpreadsheetInspection> {
+  const meta = await client.spreadsheets.get({ spreadsheetId });
+  const title = meta.data.properties?.title ?? 'Untitled';
+  const sheetMetas = meta.data.sheets ?? [];
+
+  const sheets: SpreadsheetInspection['sheets'] = [];
+
+  for (const sheetMeta of sheetMetas.slice(0, 5)) {
+    const sheetName = sheetMeta.properties?.title ?? 'Sheet1';
+    const rowCount = sheetMeta.properties?.gridProperties?.rowCount ?? 0;
+
+    const range = `'${sheetName}'!A1:Z2`;
+    const data = await client.spreadsheets.values.get({
+      spreadsheetId,
+      range,
+      valueRenderOption: 'FORMATTED_VALUE',
+    });
+
+    const rows = data.data.values ?? [];
+    sheets.push({
+      name: sheetName,
+      headers: (rows[0] ?? []).map(String),
+      sampleRow: (rows[1] ?? []).map(String),
+      rowCount,
+    });
+  }
+
+  return { title, sheets };
 }
