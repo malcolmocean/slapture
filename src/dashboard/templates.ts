@@ -1,3 +1,5 @@
+import type { ExecutionStep } from '../types.js';
+
 export function layout(title: string, content: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -162,8 +164,6 @@ export function statusBadge(status: string): string {
   };
   return `<span class="badge ${classes[status] || 'badge-secondary'}">${labels[status] || status}</span>`;
 }
-
-import type { ExecutionStep } from '../types.js';
 
 export function verificationBadge(state: string): string {
   const classes: Record<string, string> = {
@@ -362,7 +362,7 @@ export function renderLlmInteractions(steps: ExecutionStep[], _token: string): s
   const llmSteps = steps.filter(s => (LLM_STEPS as readonly string[]).includes(s.step));
   if (llmSteps.length === 0) return '';
 
-  let html = `<div class="card"><h3>LLM Inspection</h3>`;
+  let html = `<div class="card"><h3>LLM Interactions</h3>`;
 
   for (const step of llmSteps) {
     const stepType = step.step as LlmStepType;

@@ -48,7 +48,7 @@ describe('renderLlmInteractions', () => {
     const html = renderLlmInteractions(steps, 'tok123');
 
     // Section header
-    expect(html).toContain('LLM Inspection');
+    expect(html).toContain('LLM Interactions');
 
     // Badge
     expect(html).toContain('Mastermind');
