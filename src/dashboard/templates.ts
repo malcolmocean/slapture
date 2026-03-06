@@ -89,6 +89,20 @@ export function layout(title: string, content: string): string {
       padding: 3rem;
       color: #666;
     }
+    .llm-card { border-left: 4px solid #ccc; }
+    .llm-card-validator { border-left-color: #007aff; }
+    .llm-card-mastermind { border-left-color: #8b5cf6; }
+    .llm-card-evolver { border-left-color: #10b981; }
+    .llm-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .llm-section { margin-top: 1rem; }
+    .llm-section h4 { font-size: 0.875rem; color: #666; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .badge-validator { background: #cce5ff; color: #004085; }
+    .badge-mastermind { background: #ede9fe; color: #5b21b6; }
+    .badge-evolver { background: #d1fae5; color: #065f46; }
+    details.llm-raw { margin-top: 0.75rem; }
+    details.llm-raw summary { cursor: pointer; font-size: 0.875rem; color: #666; padding: 0.25rem 0; }
+    details.llm-raw summary:hover { color: #333; }
+    details.llm-raw pre { margin-top: 0.5rem; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.75rem; max-height: 500px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
   </style>
 </head>
 <body>
@@ -149,6 +163,8 @@ export function statusBadge(status: string): string {
   return `<span class="badge ${classes[status] || 'badge-secondary'}">${labels[status] || status}</span>`;
 }
 
+import type { ExecutionStep } from '../types.js';
+
 export function verificationBadge(state: string): string {
   const classes: Record<string, string> = {
     human_verified: 'badge-success',
@@ -165,4 +181,212 @@ export function verificationBadge(state: string): string {
     pending: 'Pending',
   };
   return `<span class="badge ${classes[state] || 'badge-secondary'}">${labels[state] || state}</span>`;
+}
+
+const LLM_STEPS = ['route_validate', 'mastermind', 'evolve'] as const;
+
+type LlmStepType = typeof LLM_STEPS[number];
+
+const STEP_LABELS: Record<LlmStepType, string> = {
+  route_validate: 'Validator',
+  mastermind: 'Mastermind',
+  evolve: 'Evolver',
+};
+
+const STEP_CARD_CLASS: Record<LlmStepType, string> = {
+  route_validate: 'llm-card-validator',
+  mastermind: 'llm-card-mastermind',
+  evolve: 'llm-card-evolver',
+};
+
+const STEP_BADGE_CLASS: Record<LlmStepType, string> = {
+  route_validate: 'badge-validator',
+  mastermind: 'badge-mastermind',
+  evolve: 'badge-evolver',
+};
+
+function confidenceBadgeClass(confidence: string): string {
+  if (confidence === 'certain' || confidence === 'confident') return 'badge-success';
+  if (confidence === 'plausible' || confidence === 'unsure') return 'badge-warning';
+  if (confidence === 'doubtful' || confidence === 'reject') return 'badge-danger';
+  return 'badge-secondary';
+}
+
+function mastermindActionBadgeClass(action: string): string {
+  if (action === 'route') return 'badge-success';
+  if (action === 'create') return 'badge-info';
+  if (action === 'clarify') return 'badge-warning';
+  if (action === 'inbox') return 'badge-secondary';
+  return 'badge-secondary';
+}
+
+function evolverActionBadgeClass(action: string): string {
+  if (action === 'evolved') return 'badge-success';
+  if (action === 'skipped') return 'badge-secondary';
+  if (action === 'failed') return 'badge-danger';
+  return 'badge-secondary';
+}
+
+function safe(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  return escapeHtml(String(value));
+}
+
+function renderValidatorCard(step: ExecutionStep): string {
+  const inp = step.input as Record<string, unknown> | null;
+  const out = step.output as Record<string, unknown> | null;
+
+  const routeId = safe(inp?.routeId);
+  const trigger = safe(inp?.trigger);
+  const inputText = safe(inp?.input);
+
+  const confidence = String(out?.confidence ?? '');
+  const reasoning = safe(out?.reasoning);
+  const promptUsed = safe(out?.promptUsed);
+
+  let sawHtml = '';
+  sawHtml += `<div><strong>Route:</strong> ${routeId}</div>`;
+  sawHtml += `<div><strong>Trigger:</strong> ${trigger}</div>`;
+  sawHtml += `<div><strong>Input:</strong> ${inputText}</div>`;
+
+  let decidedHtml = '';
+  decidedHtml += `<div><strong>Confidence:</strong> <span class="badge ${confidenceBadgeClass(confidence)}">${safe(confidence)}</span></div>`;
+  decidedHtml += `<div><strong>Reasoning:</strong> ${reasoning}</div>`;
+
+  return renderCardSections(sawHtml, decidedHtml, promptUsed, safe(JSON.stringify(out, null, 2)));
+}
+
+function renderMastermindCard(step: ExecutionStep): string {
+  const inp = step.input as Record<string, unknown> | null;
+  const out = step.output as Record<string, unknown> | null;
+  const dynInput = (inp?.dynamicInput ?? {}) as Record<string, unknown>;
+  const staticPrompt = safe(inp?.staticPrompt);
+
+  const raw = safe(dynInput.raw);
+  const dispatcherReason = safe(dynInput.dispatcherReason);
+  const routes = (dynInput.routesSnapshot ?? []) as Array<Record<string, unknown>>;
+
+  let sawHtml = '';
+  sawHtml += `<div><strong>Input:</strong> ${raw}</div>`;
+  sawHtml += `<div><strong>Dispatcher reason:</strong> ${dispatcherReason}</div>`;
+  if (routes.length > 0) {
+    sawHtml += `<table><thead><tr><th>Name</th><th>Description</th><th>Triggers</th><th>Recent Items</th></tr></thead><tbody>`;
+    for (const r of routes) {
+      const triggers = Array.isArray(r.triggers) ? r.triggers : [];
+      const recentItems = Array.isArray(r.recentItems) ? r.recentItems : [];
+      sawHtml += `<tr><td>${safe(r.name)}</td><td>${safe(r.description)}</td><td>${triggers.length}</td><td>${recentItems.length}</td></tr>`;
+    }
+    sawHtml += `</tbody></table>`;
+  }
+
+  const action = String(out?.action ?? '');
+  let decidedHtml = '';
+  decidedHtml += `<div><strong>Action:</strong> <span class="badge ${mastermindActionBadgeClass(action)}">${safe(action)}</span></div>`;
+  if (out?.routeId) decidedHtml += `<div><strong>Route ID:</strong> ${safe(out.routeId)}</div>`;
+  if (out?.route) decidedHtml += `<div><strong>New route:</strong> ${safe((out.route as Record<string, unknown>).name)}</div>`;
+  if (out?.question) decidedHtml += `<div><strong>Question:</strong> ${safe(out.question)}</div>`;
+  decidedHtml += `<div><strong>Reasoning:</strong> ${safe(out?.reason)}</div>`;
+
+  return renderCardSections(sawHtml, decidedHtml, staticPrompt, safe(JSON.stringify(out, null, 2)));
+}
+
+function renderEvolverCard(step: ExecutionStep): string {
+  const inp = step.input as Record<string, unknown> | null;
+  const out = step.output as Record<string, unknown> | null;
+  const dynInput = (inp?.dynamicInput ?? {}) as Record<string, unknown>;
+  const staticPrompt = safe(inp?.staticPrompt);
+  const routeSnap = (dynInput.routeSnapshot ?? {}) as Record<string, unknown>;
+
+  let sawHtml = '';
+  sawHtml += `<div><strong>Route:</strong> ${safe(routeSnap.name)} - ${safe(routeSnap.description)}</div>`;
+  sawHtml += `<div><strong>New input:</strong> ${safe(dynInput.newInput)}</div>`;
+  sawHtml += `<div><strong>Mastermind reason:</strong> ${safe(dynInput.mastermindReason)}</div>`;
+  sawHtml += `<div><strong>Attempt:</strong> ${safe(dynInput.attempt)}</div>`;
+
+  const existingTriggers = Array.isArray(routeSnap.triggers) ? routeSnap.triggers as Array<Record<string, unknown>> : [];
+  if (existingTriggers.length > 0) {
+    sawHtml += `<div><strong>Existing triggers:</strong></div><table><thead><tr><th>Pattern</th><th>Priority</th></tr></thead><tbody>`;
+    for (const t of existingTriggers) {
+      sawHtml += `<tr><td>${safe(t.pattern)}</td><td>${safe(t.priority)}</td></tr>`;
+    }
+    sawHtml += `</tbody></table>`;
+  }
+
+  const recentItems = Array.isArray(routeSnap.recentItems) ? routeSnap.recentItems as Array<Record<string, unknown>> : [];
+  if (recentItems.length > 0) {
+    sawHtml += `<div><strong>Recent matches:</strong></div><ul>`;
+    for (const item of recentItems) {
+      sawHtml += `<li>${safe(item.raw)}</li>`;
+    }
+    sawHtml += `</ul>`;
+  }
+
+  if (dynInput.validationFailure) {
+    sawHtml += `<div><strong>Validation failure:</strong> ${safe(dynInput.validationFailure)}</div>`;
+  }
+
+  const action = String(out?.action ?? '');
+  let decidedHtml = '';
+  decidedHtml += `<div><strong>Action:</strong> <span class="badge ${evolverActionBadgeClass(action)}">${safe(action)}</span></div>`;
+  decidedHtml += `<div><strong>Reasoning:</strong> ${safe(out?.reasoning)}</div>`;
+
+  const proposedTriggers = Array.isArray(out?.triggers) ? out.triggers as Array<Record<string, unknown>> : [];
+  if (proposedTriggers.length > 0) {
+    decidedHtml += `<div><strong>Proposed triggers:</strong></div><table><thead><tr><th>Pattern</th><th>Priority</th></tr></thead><tbody>`;
+    for (const t of proposedTriggers) {
+      decidedHtml += `<tr><td>${safe(t.pattern)}</td><td>${safe(t.priority)}</td></tr>`;
+    }
+    decidedHtml += `</tbody></table>`;
+  }
+
+  if (out?.validationPassed !== undefined) {
+    decidedHtml += `<div><strong>Validation:</strong> ${out.validationPassed ? 'Passed' : 'Failed'}</div>`;
+  }
+  if (out?.retriesUsed !== undefined) {
+    decidedHtml += `<div><strong>Retries used:</strong> ${safe(out.retriesUsed)}</div>`;
+  }
+
+  return renderCardSections(sawHtml, decidedHtml, staticPrompt, safe(JSON.stringify(out, null, 2)));
+}
+
+function renderCardSections(sawHtml: string, decidedHtml: string, rawPrompt: string, rawResponse: string): string {
+  let html = '';
+  html += `<div class="llm-section"><h4>What it saw</h4>${sawHtml}</div>`;
+  html += `<div class="llm-section"><h4>What it decided</h4>${decidedHtml}</div>`;
+  html += `<details class="llm-raw"><summary>Raw Prompt</summary><pre>${rawPrompt}</pre></details>`;
+  html += `<details class="llm-raw"><summary>Raw Response</summary><pre>${rawResponse}</pre></details>`;
+  return html;
+}
+
+export function renderLlmInteractions(steps: ExecutionStep[], _token: string): string {
+  const llmSteps = steps.filter(s => (LLM_STEPS as readonly string[]).includes(s.step));
+  if (llmSteps.length === 0) return '';
+
+  let html = `<div class="card"><h3>LLM Inspection</h3>`;
+
+  for (const step of llmSteps) {
+    const stepType = step.step as LlmStepType;
+    const label = STEP_LABELS[stepType];
+    const cardClass = STEP_CARD_CLASS[stepType];
+    const badgeClass = STEP_BADGE_CLASS[stepType];
+
+    html += `<div class="card llm-card ${cardClass}">`;
+    html += `<div class="llm-header">`;
+    html += `<span class="badge ${badgeClass}">${label}</span>`;
+    html += `<span class="text-muted">${step.durationMs}ms</span>`;
+    html += `</div>`;
+
+    if (stepType === 'route_validate') {
+      html += renderValidatorCard(step);
+    } else if (stepType === 'mastermind') {
+      html += renderMastermindCard(step);
+    } else if (stepType === 'evolve') {
+      html += renderEvolverCard(step);
+    }
+
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  return html;
 }
