@@ -241,7 +241,7 @@ export function buildOAuthRoutes(
     authorizeUrl.searchParams.set('client_id', config.sheetsClientId);
     authorizeUrl.searchParams.set('redirect_uri', redirectUri);
     authorizeUrl.searchParams.set('response_type', 'code');
-    authorizeUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/spreadsheets');
+    authorizeUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly');
     authorizeUrl.searchParams.set('access_type', 'offline');
     authorizeUrl.searchParams.set('prompt', 'consent');
 
