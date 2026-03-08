@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderLlmInteractions, escapeHtml } from '../../src/dashboard/templates.js';
+import { renderLlmInteractions, renderPipeline, escapeHtml } from '../../src/dashboard/templates.js';
 import type { ExecutionStep } from '../../src/types.js';
 
 function makeStep(overrides: Partial<ExecutionStep> & Pick<ExecutionStep, 'step' | 'input' | 'output'>): ExecutionStep {
@@ -12,13 +12,19 @@ function makeStep(overrides: Partial<ExecutionStep> & Pick<ExecutionStep, 'step'
 }
 
 describe('renderLlmInteractions', () => {
-  it('returns empty string when no LLM steps exist', () => {
+  it('returns empty string when no steps exist', () => {
+    expect(renderLlmInteractions([], 'tok123')).toBe('');
+  });
+
+  it('renderPipeline shows simple steps and LLM steps together', () => {
     const steps: ExecutionStep[] = [
       makeStep({ step: 'parse', input: {}, output: {} }),
-      makeStep({ step: 'dispatch', input: {}, output: {} }),
-      makeStep({ step: 'execute', input: {}, output: {} }),
+      makeStep({ step: 'dispatch', input: {}, output: { reason: 'No match', routeId: null } }),
     ];
-    expect(renderLlmInteractions(steps, 'tok123')).toBe('');
+    const html = renderPipeline(steps, null);
+    expect(html).toContain('Pipeline');
+    expect(html).toContain('Parse');
+    expect(html).toContain('Dispatch');
   });
 
   it('renders a mastermind step with structured sections', () => {
@@ -48,7 +54,7 @@ describe('renderLlmInteractions', () => {
     const html = renderLlmInteractions(steps, 'tok123');
 
     // Section header
-    expect(html).toContain('LLM Interactions');
+    expect(html).toContain('Pipeline');
 
     // Badge
     expect(html).toContain('Mastermind');

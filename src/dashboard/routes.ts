@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import type { StorageInterface } from '../storage/interface.js';
-import { layout, escapeHtml, formatDate, statusBadge, verificationBadge, renderLlmInteractions } from './templates.js';
+import { layout, escapeHtml, formatDate, statusBadge, verificationBadge, renderPipeline } from './templates.js';
 import { getIntegrationsWithStatus } from '../integrations/registry.js';
 
 export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void {
@@ -156,36 +156,28 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       return c.html(layout('Not Found', '<h1>Capture not found</h1>'), 404);
     }
 
+    const route = capture.routeFinal ? await storage.getRoute(capture.routeFinal) : null;
+
     const content = `
       <h1>Capture Detail</h1>
 
       <div class="card">
-        <h3>Input</h3>
-        <pre style="background: #f5f5f5; padding: 1rem; border-radius: 4px; overflow-x: auto;">${escapeHtml(capture.raw)}</pre>
-      </div>
-
-      <div class="card">
-        <h3>Status</h3>
-        <table>
-          <tr><td><strong>ID</strong></td><td><code>${capture.id}</code></td></tr>
-          <tr><td><strong>Time</strong></td><td>${formatDate(capture.timestamp)}</td></tr>
-          <tr><td><strong>Status</strong></td><td>${statusBadge(capture.executionResult)}</td></tr>
-          <tr><td><strong>Verification</strong></td><td>${verificationBadge(capture.verificationState)}</td></tr>
-          <tr><td><strong>Route</strong></td><td>${capture.routeFinal ? `<a href="/dashboard/routes/${capture.routeFinal}">${capture.routeFinal}</a>` : '-'}</td></tr>
-          <tr><td><strong>Confidence</strong></td><td>${capture.routeConfidence || '-'}</td></tr>
-        </table>
-      </div>
-
-      <div class="card">
-        <h3>Actions</h3>
-        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <pre style="background: #f5f5f5; padding: 1rem; border-radius: 4px; overflow-x: auto; margin-bottom: 0.75rem;">${escapeHtml(capture.raw)}</pre>
+        <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+          <span class="text-muted">${formatDate(capture.timestamp)}</span>
+          ${statusBadge(capture.executionResult)}
+          ${verificationBadge(capture.verificationState)}
+          ${route ? `<a href="/dashboard/routes/${route.id}" style="text-decoration: none;"><strong>${escapeHtml(route.name)}</strong></a>` : capture.routeFinal ? `<code>${escapeHtml(capture.routeFinal)}</code>` : ''}
+          ${capture.routeConfidence ? `<span class="text-muted">${capture.routeConfidence} confidence</span>` : ''}
+          <span class="text-muted" style="font-size: 0.75rem;"><code>${capture.id}</code></span>
+        </div>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
           ${capture.verificationState !== 'human_verified' ? `
             <form method="post" action="/dashboard/captures/${captureId}/verify" style="margin: 0;">
               <button type="submit" class="btn btn-primary">Verify Correct</button>
             </form>
             <a href="/dashboard/captures/${captureId}/correct" class="btn btn-secondary">This was wrong</a>
-          ` : '<span class="badge badge-success">Already Verified</span>'}
-
+          ` : ''}
           ${['blocked_needs_auth', 'blocked_auth_expired'].includes(capture.executionResult) ? `
             <form method="post" action="/retry/${captureId}" style="margin: 0;">
               <button type="submit" class="btn btn-secondary">Retry</button>
@@ -194,31 +186,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
         </div>
       </div>
 
-      <div class="card">
-        <h3>Execution Trace</h3>
-        ${capture.executionTrace.length === 0 ? '<p class="text-muted">No trace recorded</p>' : `
-          <table>
-            <thead>
-              <tr>
-                <th>Step</th>
-                <th>Duration</th>
-                <th>Output</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${capture.executionTrace.map(step => `
-                <tr>
-                  <td><strong>${step.step}</strong></td>
-                  <td>${step.durationMs}ms</td>
-                  <td><pre style="margin: 0; font-size: 0.75rem; max-width: 400px; overflow-x: auto;">${escapeHtml(JSON.stringify(step.output, null, 2).slice(0, 500))}</pre></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        `}
-      </div>
-
-      ${renderLlmInteractions(capture.executionTrace, '')}
+      ${renderPipeline(capture.executionTrace, route)}
 
       <p style="margin-top: 1rem;">
         <a href="/dashboard/captures">← Back to captures</a>

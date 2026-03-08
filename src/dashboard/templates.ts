@@ -1,4 +1,4 @@
-import type { ExecutionStep } from '../types.js';
+import type { ExecutionStep, Route } from '../types.js';
 
 export function layout(title: string, content: string): string {
   return `<!DOCTYPE html>
@@ -358,35 +358,87 @@ function renderCardSections(sawHtml: string, decidedHtml: string, rawPrompt: str
   return html;
 }
 
-export function renderLlmInteractions(steps: ExecutionStep[], _token: string): string {
-  const llmSteps = steps.filter(s => (LLM_STEPS as readonly string[]).includes(s.step));
-  if (llmSteps.length === 0) return '';
+function renderSimpleStep(step: ExecutionStep, route: Route | null): string {
+  const out = (step.output || {}) as Record<string, unknown>;
+  const inp = (step.input || {}) as Record<string, unknown>;
 
-  let html = `<div class="card"><h3>LLM Interactions</h3>`;
+  if (step.step === 'parse') {
+    const payload = safe(inp.raw || out.payload || (out as Record<string, unknown>).payload);
+    const explicit = out.explicitRoute ? `<span class="badge badge-info">explicit: ${safe(out.explicitRoute)}</span>` : '';
+    return `<div style="display: flex; gap: 0.75rem; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #eee;">
+      <strong style="min-width: 5rem;">Parse</strong>
+      <span class="text-muted">${step.durationMs}ms</span>
+      ${explicit}
+    </div>`;
+  }
 
-  for (const step of llmSteps) {
-    const stepType = step.step as LlmStepType;
-    const label = STEP_LABELS[stepType];
-    const cardClass = STEP_CARD_CLASS[stepType];
-    const badgeClass = STEP_BADGE_CLASS[stepType];
+  if (step.step === 'dispatch') {
+    const reason = safe(out.reason);
+    const routeId = out.routeId ? safe(out.routeId) : '<em>no match</em>';
+    const confidence = out.confidence ? `<span class="badge badge-secondary">${safe(out.confidence)}</span>` : '';
+    return `<div style="display: flex; gap: 0.75rem; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #eee;">
+      <strong style="min-width: 5rem;">Dispatch</strong>
+      <span class="text-muted">${step.durationMs}ms</span>
+      ${confidence}
+      <span>${routeId}</span>
+      <span class="text-muted">${reason}</span>
+    </div>`;
+  }
 
-    html += `<div class="card llm-card ${cardClass}">`;
-    html += `<div class="llm-header">`;
-    html += `<span class="badge ${badgeClass}">${label}</span>`;
-    html += `<span class="text-muted">${step.durationMs}ms</span>`;
-    html += `</div>`;
-
-    if (stepType === 'route_validate') {
-      html += renderValidatorCard(step);
-    } else if (stepType === 'mastermind') {
-      html += renderMastermindCard(step);
-    } else if (stepType === 'evolve') {
-      html += renderEvolverCard(step);
+  if (step.step === 'execute') {
+    const status = out.status ? safe(out.status) : '';
+    const error = out.error ? `<span class="badge badge-danger">${safe(out.error)}</span>` : '';
+    let routeInfo = '';
+    if (route) {
+      routeInfo = `<span><strong>${safe(route.name)}</strong> → <span class="badge badge-info">${safe(route.destinationType)}</span></span>`;
     }
+    return `<div style="display: flex; gap: 0.75rem; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #eee; flex-wrap: wrap;">
+      <strong style="min-width: 5rem;">Execute</strong>
+      <span class="text-muted">${step.durationMs}ms</span>
+      ${routeInfo}
+      ${status ? `<span class="badge badge-success">${status}</span>` : ''}
+      ${error}
+    </div>`;
+  }
 
-    html += `</div>`;
+  return '';
+}
+
+export function renderPipeline(steps: ExecutionStep[], route: Route | null): string {
+  if (steps.length === 0) return '';
+
+  let html = `<div class="card"><h3>Pipeline</h3>`;
+
+  for (const step of steps) {
+    if ((LLM_STEPS as readonly string[]).includes(step.step)) {
+      const stepType = step.step as LlmStepType;
+      const label = STEP_LABELS[stepType];
+      const cardClass = STEP_CARD_CLASS[stepType];
+      const badgeClass = STEP_BADGE_CLASS[stepType];
+
+      html += `<div class="card llm-card ${cardClass}">`;
+      html += `<div class="llm-header">`;
+      html += `<span class="badge ${badgeClass}">${label}</span>`;
+      html += `<span class="text-muted">${step.durationMs}ms</span>`;
+      html += `</div>`;
+
+      if (stepType === 'route_validate') {
+        html += renderValidatorCard(step);
+      } else if (stepType === 'mastermind') {
+        html += renderMastermindCard(step);
+      } else if (stepType === 'evolve') {
+        html += renderEvolverCard(step);
+      }
+
+      html += `</div>`;
+    } else {
+      html += renderSimpleStep(step, route);
+    }
   }
 
   html += `</div>`;
   return html;
 }
+
+// Keep old name as alias for backwards compatibility with tests
+export const renderLlmInteractions = (steps: ExecutionStep[], _token: string) => renderPipeline(steps, null);
