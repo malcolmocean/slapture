@@ -96,7 +96,7 @@ export async function buildServer(
   app.post('/capture', async (c) => {
     try {
       const body = await c.req.json().catch(() => ({}));
-      const { text } = body;
+      const text = body.text || new URL(c.req.url).searchParams.get('text');
       const auth = c.get('auth');
       if (!auth?.uid) {
         return c.json({ error: 'Authentication required' }, 401);
@@ -108,6 +108,33 @@ export async function buildServer(
       }
 
       const result = await pipeline.process(text, username);
+
+      return c.json({
+        captureId: result.capture.id,
+        status: result.capture.executionResult,
+        routeFinal: result.capture.routeFinal,
+        needsClarification: result.needsClarification,
+      });
+    } catch (error) {
+      console.error('[Capture] Error processing capture:', error);
+      return c.json({ error: 'Failed to process capture' }, 500);
+    }
+  });
+
+  // GET /capture - simple query-param-only capture
+  app.get('/capture', async (c) => {
+    try {
+      const text = new URL(c.req.url).searchParams.get('text');
+      const auth = c.get('auth');
+      if (!auth?.uid) {
+        return c.json({ error: 'Authentication required' }, 401);
+      }
+
+      if (!text) {
+        return c.json({ error: 'text query param is required' }, 400);
+      }
+
+      const result = await pipeline.process(text, auth.uid);
 
       return c.json({
         captureId: result.capture.id,

@@ -671,8 +671,8 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
               <code style="display: block; padding: 0.5rem 0.75rem; background: #fff; border: 1px solid #c3e6cb; border-radius: 4px; word-break: break-all; font-size: 0.8rem; cursor: pointer;" onclick="navigator.clipboard.writeText(this.textContent.trim())" title="Click to copy">curl -X POST ${baseUrl}/capture -H "X-API-Key: ${key}" -H "Content-Type: application/json" -d '{"text":"hello"}'</code>
             </div>
             <div>
-              <label style="font-size: 0.75rem; color: #155724; font-weight: 500;">CURL (QUERY PARAM)</label>
-              <code style="display: block; padding: 0.5rem 0.75rem; background: #fff; border: 1px solid #c3e6cb; border-radius: 4px; word-break: break-all; font-size: 0.8rem; cursor: pointer;" onclick="navigator.clipboard.writeText(this.textContent.trim())" title="Click to copy">curl -X POST "${baseUrl}/capture?api_key=${key}" -H "Content-Type: application/json" -d '{"text":"hello"}'</code>
+              <label style="font-size: 0.75rem; color: #155724; font-weight: 500;">URL (QUERY PARAM)</label>
+              <code style="display: block; padding: 0.5rem 0.75rem; background: #fff; border: 1px solid #c3e6cb; border-radius: 4px; word-break: break-all; font-size: 0.8rem; cursor: pointer;" onclick="navigator.clipboard.writeText(this.textContent.trim())" title="Click to copy">${baseUrl}/capture?api_key=${key}&amp;text=hello</code>
             </div>
           </div>
           <p style="margin: 0.5rem 0 0; font-size: 0.75rem; color: #155724;">Click any block to copy.</p>
