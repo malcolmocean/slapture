@@ -33,6 +33,12 @@ export interface Capture {
   retiredFromTests: boolean;
   retiredReason: string | null;
 
+  /** The payload after pipeline string transform ran (null if no transform or fs destination) */
+  transformedPayload?: string | null;
+
+  /** The trigger pattern string that matched this capture in the dispatcher */
+  matchedTrigger?: string | null;
+
   // Tiered regression protection fields
   routingReviewQueued?: boolean;      // Awaiting human decision on re-route
   suggestedReroute?: string | null;   // Route ID evolver thinks it should go to
