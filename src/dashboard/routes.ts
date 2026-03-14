@@ -655,29 +655,8 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
         API keys let you post captures from scripts, shortcuts, and other tools without browser auth.
       </p>
 
-      ${created ? (() => {
-        const baseUrl = escapeHtml(process.env.CALLBACK_BASE_URL || 'http://localhost:4444');
-        const key = escapeHtml(created);
-        return `
-        <div class="card" style="background: #d4edda; border-left: 4px solid #155724; margin-bottom: 1rem;">
-          <p style="margin: 0 0 0.75rem; color: #155724;"><strong>Key created!</strong> Copy what you need — you won't see this again.</p>
-          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-            <div>
-              <label style="font-size: 0.75rem; color: #155724; font-weight: 500;">ENV VAR</label>
-              <code style="display: block; padding: 0.5rem 0.75rem; background: #fff; border: 1px solid #c3e6cb; border-radius: 4px; word-break: break-all; font-size: 0.8rem; cursor: pointer;" onclick="navigator.clipboard.writeText(this.textContent.trim())" title="Click to copy">SLAPTURE_API_KEY='${key}'</code>
-            </div>
-            <div>
-              <label style="font-size: 0.75rem; color: #155724; font-weight: 500;">CURL (HEADER)</label>
-              <code style="display: block; padding: 0.5rem 0.75rem; background: #fff; border: 1px solid #c3e6cb; border-radius: 4px; word-break: break-all; font-size: 0.8rem; cursor: pointer;" onclick="navigator.clipboard.writeText(this.textContent.trim())" title="Click to copy">curl -X POST ${baseUrl}/capture -H "X-API-Key: ${key}" -H "Content-Type: application/json" -d '{"text":"hello"}'</code>
-            </div>
-            <div>
-              <label style="font-size: 0.75rem; color: #155724; font-weight: 500;">URL (QUERY PARAM)</label>
-              <code style="display: block; padding: 0.5rem 0.75rem; background: #fff; border: 1px solid #c3e6cb; border-radius: 4px; word-break: break-all; font-size: 0.8rem; cursor: pointer;" onclick="navigator.clipboard.writeText(this.textContent.trim())" title="Click to copy">${baseUrl}/capture?api_key=${key}&amp;text=hello</code>
-            </div>
-          </div>
-          <p style="margin: 0.5rem 0 0; font-size: 0.75rem; color: #155724;">Click any block to copy.</p>
-        </div>
-      `})() : ''}
+      <div id="key-created-banner" style="display: none;" class="card" style="margin-bottom: 1rem;">
+      </div>
 
       ${revoked ? `
         <div class="card" style="background: #d4edda; border-left: 4px solid #155724; margin-bottom: 1rem;">
@@ -687,14 +666,14 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
 
       <div class="card">
         <h3>Create New Key</h3>
-        <form method="post" action="/dashboard/api-keys/create">
+        <form id="create-key-form">
           <div style="display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap;">
             <div>
               <label for="keyName">Name</label>
               <input type="text" id="keyName" name="name" placeholder="e.g. ios-shortcut" required
                 style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; width: 250px;">
             </div>
-            <button type="submit" class="btn btn-primary">Create Key</button>
+            <button type="submit" id="create-key-btn" class="btn btn-primary">Create Key</button>
           </div>
         </form>
       </div>
@@ -734,52 +713,66 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
           </table>
         `}
       </div>
+
+      <script>
+        var baseUrl = ${JSON.stringify(process.env.CALLBACK_BASE_URL || 'http://localhost:4444')};
+        document.getElementById('create-key-form').addEventListener('submit', async function(e) {
+          e.preventDefault();
+          var btn = document.getElementById('create-key-btn');
+          var nameInput = document.getElementById('keyName');
+          var name = nameInput.value.trim();
+          if (!name) return;
+
+          btn.disabled = true;
+          btn.textContent = 'Creating...';
+
+          try {
+            var res = await fetch('/api/keys', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: name })
+            });
+            var data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+
+            var key = data.key;
+            var banner = document.getElementById('key-created-banner');
+            banner.style.display = 'block';
+            banner.style.background = '#d4edda';
+            banner.style.borderLeft = '4px solid #155724';
+            banner.style.marginBottom = '1rem';
+            banner.innerHTML = '<p style="margin: 0 0 0.75rem; color: #155724;"><strong>Key created!</strong> Copy what you need — you won\\u0027t see this again.</p>'
+              + '<div style="display: flex; flex-direction: column; gap: 0.5rem;">'
+              + '<div><label style="font-size: 0.75rem; color: #155724; font-weight: 500;">ENV VAR</label>'
+              + '<code class="copyable-block" onclick="navigator.clipboard.writeText(this.textContent.trim())" title="Click to copy">SLAPTURE_API_KEY=\\u0027' + key + '\\u0027</code></div>'
+              + '<div><label style="font-size: 0.75rem; color: #155724; font-weight: 500;">CURL (HEADER)</label>'
+              + '<code class="copyable-block" onclick="navigator.clipboard.writeText(this.textContent.trim())" title="Click to copy">curl -X POST ' + baseUrl + '/capture -H "X-API-Key: ' + key + '" -H "Content-Type: application/json" -d \\u0027{"text":"hello"}\\u0027</code></div>'
+              + '<div><label style="font-size: 0.75rem; color: #155724; font-weight: 500;">URL (QUERY PARAM)</label>'
+              + '<code class="copyable-block" onclick="navigator.clipboard.writeText(this.textContent.trim())" title="Click to copy">' + baseUrl + '/capture?api_key=' + key + '&text=hello</code></div>'
+              + '</div>'
+              + '<p style="margin: 0.5rem 0 0; font-size: 0.75rem; color: #155724;">Click any block to copy.</p>';
+            banner.scrollIntoView({ behavior: 'smooth' });
+
+            nameInput.value = '';
+          } catch (err) {
+            alert('Failed to create key: ' + err.message);
+          } finally {
+            btn.disabled = false;
+            btn.textContent = 'Create Key';
+          }
+        });
+      </script>
+      <style>
+        .copyable-block {
+          display: block; padding: 0.5rem 0.75rem; background: #fff;
+          border: 1px solid #c3e6cb; border-radius: 4px; word-break: break-all;
+          font-size: 0.8rem; cursor: pointer;
+        }
+        .copyable-block:hover { background: #f0fff0; }
+      </style>
     `;
 
     return c.html(layout('API Keys', content));
-  });
-
-  // Create API key (form POST, redirects back with the raw key shown once)
-  app.post('/dashboard/api-keys/create', async (c) => {
-    const auth = c.get('auth');
-    const body = await c.req.parseBody() as Record<string, string>;
-    const name = body.name;
-
-    if (!name) {
-      return c.redirect('/dashboard/api-keys');
-    }
-
-    // Call the JSON API internally
-    const { randomUUID, createHash } = await import('crypto');
-    const bcrypt = await import('bcryptjs');
-
-    const prefix = 'slap_k_';
-    const randomPart = Array.from({ length: 40 }, () =>
-      Math.floor(Math.random() * 16).toString(16)
-    ).join('');
-    const rawKey = prefix + randomPart;
-
-    const keyHash = await bcrypt.default.hash(rawKey, 10);
-    const indexKey = createHash('sha256').update(rawKey).digest('hex');
-    const keyId = randomUUID();
-    const displayPrefix = rawKey.slice(0, 16);
-
-    const apiKey = {
-      id: keyId,
-      name,
-      keyHash,
-      prefix: displayPrefix,
-      temporary: false,
-      createdAt: new Date().toISOString(),
-      expiresAt: null,
-      lastUsedAt: null,
-      status: 'active' as const,
-    };
-
-    await storage.saveApiKey(auth.uid, apiKey);
-    await storage.saveApiKeyIndex(indexKey, auth.uid, keyId);
-
-    return c.redirect(`/dashboard/api-keys?created=${encodeURIComponent(rawKey)}`);
   });
 
   // Revoke API key (form POST)
