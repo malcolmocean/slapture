@@ -655,15 +655,29 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
         API keys let you post captures from scripts, shortcuts, and other tools without browser auth.
       </p>
 
-      ${created ? `
+      ${created ? (() => {
+        const baseUrl = escapeHtml(process.env.CALLBACK_BASE_URL || 'http://localhost:4444');
+        const key = escapeHtml(created);
+        return `
         <div class="card" style="background: #d4edda; border-left: 4px solid #155724; margin-bottom: 1rem;">
-          <p style="margin: 0 0 0.5rem; color: #155724;"><strong>Key created!</strong> Copy it now — you won't see it again.</p>
-          <code style="display: block; padding: 0.75rem; background: #fff; border: 1px solid #c3e6cb; border-radius: 4px; word-break: break-all; font-size: 0.875rem;">${escapeHtml(created)}</code>
-          <p style="margin: 0.5rem 0 0; font-size: 0.8rem; color: #155724;">
-            Use it as: <code>curl -X POST ${escapeHtml(process.env.CALLBACK_BASE_URL || 'http://localhost:4444')}/capture -H "X-API-Key: YOUR_KEY" -H "Content-Type: application/json" -d '{"text":"hello"}'</code>
-          </p>
+          <p style="margin: 0 0 0.75rem; color: #155724;"><strong>Key created!</strong> Copy what you need — you won't see this again.</p>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <div>
+              <label style="font-size: 0.75rem; color: #155724; font-weight: 500;">ENV VAR</label>
+              <code style="display: block; padding: 0.5rem 0.75rem; background: #fff; border: 1px solid #c3e6cb; border-radius: 4px; word-break: break-all; font-size: 0.8rem; cursor: pointer;" onclick="navigator.clipboard.writeText(this.textContent.trim())" title="Click to copy">SLAPTURE_API_KEY='${key}'</code>
+            </div>
+            <div>
+              <label style="font-size: 0.75rem; color: #155724; font-weight: 500;">CURL (HEADER)</label>
+              <code style="display: block; padding: 0.5rem 0.75rem; background: #fff; border: 1px solid #c3e6cb; border-radius: 4px; word-break: break-all; font-size: 0.8rem; cursor: pointer;" onclick="navigator.clipboard.writeText(this.textContent.trim())" title="Click to copy">curl -X POST ${baseUrl}/capture -H "X-API-Key: ${key}" -H "Content-Type: application/json" -d '{"text":"hello"}'</code>
+            </div>
+            <div>
+              <label style="font-size: 0.75rem; color: #155724; font-weight: 500;">CURL (QUERY PARAM)</label>
+              <code style="display: block; padding: 0.5rem 0.75rem; background: #fff; border: 1px solid #c3e6cb; border-radius: 4px; word-break: break-all; font-size: 0.8rem; cursor: pointer;" onclick="navigator.clipboard.writeText(this.textContent.trim())" title="Click to copy">curl -X POST "${baseUrl}/capture?api_key=${key}" -H "Content-Type: application/json" -d '{"text":"hello"}'</code>
+            </div>
+          </div>
+          <p style="margin: 0.5rem 0 0; font-size: 0.75rem; color: #155724;">Click any block to copy.</p>
         </div>
-      ` : ''}
+      `})() : ''}
 
       ${revoked ? `
         <div class="card" style="background: #d4edda; border-left: 4px solid #155724; margin-bottom: 1rem;">
