@@ -21,6 +21,20 @@ export const INTEGRATIONS: Integration[] = [
     name: 'intend.do',
     purpose: 'Track daily intentions, todos, and goals',
     authType: 'oauth',
+    defaultRoutes: [
+      {
+        key: 'intend-format',
+        name: 'intend',
+        description: 'Intentions in intend.do format (e.g. "1) do laundry", "&) random task")',
+        triggers: [{
+          pattern: '^[^\\d\\sA-Za-z)]{0,3}(?:(?:\\d|[A-Z]{2})(?:,(?:\\d|[A-Z]{2}))*)?[^\\d\\sA-Z)]{0,3}(?:\\)+|//)\\s+.+',
+          priority: 10,
+        }],
+        destinationType: 'intend',
+        destinationConfig: { baseUrl: '' },
+        transformScript: null,
+      },
+    ],
   },
   {
     id: 'fs',
