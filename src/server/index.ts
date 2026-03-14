@@ -4,6 +4,7 @@ import type { StorageInterface } from '../storage/interface.js';
 import type { SheetsAuthProvider } from '../integrations/sheets/types.js';
 import { CapturePipeline } from '../pipeline/index.js';
 import { buildOAuthRoutes } from './oauth.js';
+import { buildRoamRoutes } from './roam.js';
 import { buildDashboardRoutes } from '../dashboard/routes.js';
 import { getAuth } from 'firebase-admin/auth';
 import path from 'path';
@@ -213,6 +214,9 @@ export async function buildServer(
     sheetsClientId: process.env.GOOGLE_CLIENT_ID,
     sheetsClientSecret: process.env.GOOGLE_CLIENT_SECRET,
   });
+
+  // Roam routes
+  buildRoamRoutes(app, storage);
 
   // Dashboard routes
   buildDashboardRoutes(app, storage);

@@ -383,6 +383,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     const auth = c.get('auth');
     const integrations = await getIntegrationsWithStatus(storage, auth.uid);
     const blocked = await storage.listCapturesNeedingAuth(auth.uid);
+    const roamConfig = await storage.getRoamConfig(auth.uid);
 
     const statusBadgeMap: Record<string, string> = {
       connected: 'badge-success',
@@ -421,12 +422,52 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
                     ` : `
                       <a href="/connect/${i.id}" class="btn btn-primary">Connect</a>
                     `}
+                  ` : i.id === 'roam' ? `
+                    ${i.status === 'connected' ? '<span class="badge badge-success">Connected</span>' : ''}
                   ` : '<span class="text-muted">No auth needed</span>'}
                 </td>
               </tr>
             `).join('')}
           </tbody>
         </table>
+      </div>
+
+      <div class="card">
+        <h3>Roam Research Graphs</h3>
+        ${roamConfig?.graphs?.length ? `
+          <table>
+            <thead>
+              <tr><th>Graph</th><th>Connected</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              ${roamConfig.graphs.map(g => `
+                <tr>
+                  <td><strong>${escapeHtml(g.graphName)}</strong></td>
+                  <td class="text-muted">${formatDate(g.addedAt)}</td>
+                  <td>
+                    <form method="post" action="/disconnect/roam/${escapeHtml(g.graphName)}?redirect=/dashboard/auth" style="display: inline;">
+                      <button type="submit" class="btn btn-danger">Remove</button>
+                    </form>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : '<p class="text-muted">No Roam graphs connected</p>'}
+        <h4 style="margin-top: 1rem;">Add Graph</h4>
+        <form method="post" action="/connect/roam">
+          <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+            <div>
+              <label>Graph Name</label>
+              <input type="text" name="graphName" placeholder="my-graph" required style="width: 200px;">
+            </div>
+            <div>
+              <label>API Token</label>
+              <input type="password" name="token" placeholder="roam-graph-token-..." required style="width: 300px;">
+            </div>
+            <button type="submit" class="btn btn-primary">Connect</button>
+          </div>
+        </form>
       </div>
 
       <div class="card">
