@@ -36,11 +36,10 @@ export class IntendExecutor {
       };
     }
 
-    // Extract payload
-    const payload = capture.parsed?.payload || capture.raw;
+    // The payload must already be in intend format (e.g. "1) do laundry", "&) task")
+    const raw = capture.parsed?.payload || capture.raw;
 
-    // Call API
-    const result = await client.addIntention(payload);
+    const result = await client.postIntention(raw);
 
     if (result.authExpired) {
       return {

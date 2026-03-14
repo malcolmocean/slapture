@@ -194,6 +194,31 @@ Common patterns:
 - JSON map: read, parse, update, write back
 - CSV append: fs.appendFileSync('filename.csv', timestamp.split('T')[0] + ',' + message + '\\n')
 
+### "intend" - intend.do intentions
+destinationConfig: {} (no config needed — the executor handles OAuth and API calls)
+No transformScript needed — the intend executor posts the payload directly to the intend.do API.
+
+IMPORTANT: The payload is sent as the "raw" field to intend.do's API, which parses it with this regex:
+  /^([^\\d\\sA-Za-z)]{0,3})((?:\\d|[A-Z]{2})?(?:,(?:\\d|[A-Z]{2}))*)([^\\d\\sA-Z)]{0,3})(\\)+|\\/\\/)[\\s]+(.*)/u
+
+Broken down:
+  _c       = extras before goal code (usually blank, '&' for misc)
+  gids     = goal code(s): single digit 0-9, two uppercase letters (e.g. FI), empty, or comma-separated (e.g. "1,FI,3")
+  c_       = extras after goal code (usually blank, '*' → starred)
+  delimiter = ')' for task, '//' for comment
+  t        = the intention text
+
+Examples of valid raw strings:
+  "1) do laundry"         → goal 1
+  "FI) run 5k"            → goal FI
+  "1,FI) run then rest"   → goals 1 and FI
+  "&) random task"         → misc/ungrouped
+  ") just a task"          → no goal
+  "// this is a comment"   → comment
+
+When routing to intend, the payload MUST already be in this format (with goal code + delimiter + text).
+The executor sends it directly — it does NOT wrap it.
+
 ### "notes" - Save notes about integrations or destinations
 destinationConfig: {target: "integration" | "destination", id: "<integrationId or routeName>"}
 No transformScript needed - the notes executor handles storage.

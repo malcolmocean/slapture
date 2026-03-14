@@ -61,6 +61,30 @@ When a capture routes to intend.do but OAuth isn't set up:
 5. Tokens stored in `/data/config.json` under `integrations.intend`
 6. Blocked captures become retryable
 
+### Intend Intention Format
+
+All intentions sent to intend.do must match the following regex:
+
+```
+/^([^\d\sA-Za-z)]{0,3})((?:\d|[A-Z]{2})?(?:,(?:\d|[A-Z]{2}))*)([^\d\sA-Z)]{0,3})(\)+|\/\/)\s+(.*)/u
+```
+
+Parsed fields:
+- `_c` (capture group 1): extras before code — usually blank, `&` for misc
+- `gids` (capture group 2): goal code(s) — a single digit `0-9`, two uppercase letters (e.g. `FI`), empty string, or comma-separated multiples (e.g. `1,FI,3`)
+- `c_` (capture group 3): extras after code — usually blank, `*` gets parsed into `★` (starred)
+- delimiter (capture group 4): `)` for task, `//` for comment
+- `t` (capture group 5): the main intention text
+
+Examples:
+- `1) do laundry` → goal 1
+- `FI) run 5k` → goal FI (e.g. Fitness)
+- `1,FI) run then rest` → goals 1 and FI
+- `&) random task` → misc/ungrouped
+- `*1) important task` → extras=`*`, goal 1 (starred)
+- `) just a task` → no goal code
+- `// this is a comment` → comment, not a task
+
 ### Test Examples
 
 ```

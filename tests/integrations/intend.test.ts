@@ -24,11 +24,11 @@ describe('IntendClient', () => {
       json: async () => data,
     });
 
-  describe('addIntention', () => {
-    it('should POST with default ungrouped goal (&)', async () => {
+  describe('postIntention', () => {
+    it('should POST raw string directly to API', async () => {
       mockOk();
       const client = makeClient();
-      const result = await client.addIntention('buy groceries');
+      const result = await client.postIntention('&) buy groceries');
 
       expect(mockFetch).toHaveBeenCalledWith(
         'https://intend.do/api/v0/u/me/intentions',
@@ -44,10 +44,10 @@ describe('IntendClient', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should format single goal number correctly', async () => {
+    it('should pass through goal number in raw string', async () => {
       mockOk();
       const client = makeClient();
-      await client.addIntention('practice guitar for 30 minutes', '1');
+      await client.postIntention('1) practice guitar for 30 minutes');
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
@@ -57,10 +57,10 @@ describe('IntendClient', () => {
       );
     });
 
-    it('should format multi-goal codes (e.g. "2,3")', async () => {
+    it('should pass through multi-goal codes (e.g. "2,3")', async () => {
       mockOk();
       const client = makeClient();
-      await client.addIntention('go for a walk with John', '2,3');
+      await client.postIntention('2,3) go for a walk with John');
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
@@ -70,10 +70,10 @@ describe('IntendClient', () => {
       );
     });
 
-    it('should format inactive goal codes (two letters)', async () => {
+    it('should pass through two-letter goal codes', async () => {
       mockOk();
       const client = makeClient();
-      await client.addIntention('upgrade node', 'AB');
+      await client.postIntention('AB) upgrade node');
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
@@ -87,7 +87,7 @@ describe('IntendClient', () => {
       const responseData = { count: 3, today: { core: ['item1', 'item2', 'item3'] } };
       mockOk(responseData);
       const client = makeClient();
-      const result = await client.addIntention('test');
+      const result = await client.postIntention('&) test');
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(responseData);
@@ -96,7 +96,7 @@ describe('IntendClient', () => {
     it('should return auth_expired on 401', async () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized' });
       const client = makeClient();
-      const result = await client.addIntention('test');
+      const result = await client.postIntention('&) test');
 
       expect(result.success).toBe(false);
       expect(result.authExpired).toBe(true);
@@ -105,7 +105,7 @@ describe('IntendClient', () => {
     it('should return error with status on 400 (invalid intention)', async () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 400, statusText: 'Bad Request' });
       const client = makeClient();
-      const result = await client.addIntention('');
+      const result = await client.postIntention('');
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('400');
@@ -114,7 +114,7 @@ describe('IntendClient', () => {
     it('should return error on 500 server error', async () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Internal Server Error' });
       const client = makeClient();
-      const result = await client.addIntention('test');
+      const result = await client.postIntention('&) test');
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('500');
@@ -123,7 +123,7 @@ describe('IntendClient', () => {
     it('should return error on 429 rate limit', async () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 429, statusText: 'Too Many Requests' });
       const client = makeClient();
-      const result = await client.addIntention('test');
+      const result = await client.postIntention('&) test');
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('429');
@@ -132,7 +132,7 @@ describe('IntendClient', () => {
     it('should handle network errors (fetch throws)', async () => {
       mockFetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));
       const client = makeClient();
-      const result = await client.addIntention('test');
+      const result = await client.postIntention('&) test');
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Network error');
@@ -142,7 +142,7 @@ describe('IntendClient', () => {
     it('should handle DNS resolution failure', async () => {
       mockFetch.mockRejectedValueOnce(new Error('getaddrinfo ENOTFOUND intend.do'));
       const client = makeClient();
-      const result = await client.addIntention('test');
+      const result = await client.postIntention('&) test');
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Network error');
@@ -151,7 +151,7 @@ describe('IntendClient', () => {
     it('should use custom baseUrl', async () => {
       mockOk();
       const client = makeClient({ baseUrl: 'https://staging.intend.do' });
-      await client.addIntention('test');
+      await client.postIntention('&) test');
 
       expect(mockFetch).toHaveBeenCalledWith(
         'https://staging.intend.do/api/v0/u/me/intentions',
