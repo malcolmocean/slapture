@@ -26,9 +26,9 @@ test.describe('intend.do OAuth Integration', () => {
   test('complete OAuth flow and route intention capture', async ({ page }) => {
     // TODO: intend.do login form selectors need manual verification
     // Run with --headed to debug: npx playwright test tests/e2e/intend-oauth.spec.ts --headed
-    // 1. Go to dashboard auth page
-    await page.goto('/dashboard/auth');
-    await expect(page.locator('h1')).toContainText('Auth Status');
+    // 1. Go to intend settings page
+    await page.goto('/dashboard/integrations/intend');
+    await expect(page.locator('h1')).toContainText('intend.do Settings');
 
     // 2. Click Connect for intend
     await page.click('a[href="/connect/intend"]');

@@ -61,9 +61,9 @@ test.describe('Google Sheets OAuth Integration', () => {
   });
 
   test('complete OAuth flow: connect Google Sheets', async ({ page }) => {
-    // 1. Go to dashboard auth page
-    await page.goto('/dashboard/auth');
-    await expect(page.locator('h1')).toContainText('Auth Status');
+    // 1. Go to Sheets settings page
+    await page.goto('/dashboard/integrations/sheets');
+    await expect(page.locator('h1')).toContainText('Google Sheets Settings');
 
     // 2. Click Connect for Google Sheets
     await page.click('a[href="/connect/sheets"]');

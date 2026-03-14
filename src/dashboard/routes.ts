@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 import type { StorageInterface } from '../storage/interface.js';
 import { layout, escapeHtml, formatDate, statusBadge, verificationBadge, renderPipeline } from './templates.js';
-import { getIntegrationsWithStatus } from '../integrations/registry.js';
+import { getIntegration, getIntegrationsWithStatus } from '../integrations/registry.js';
 
 export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void {
   // Dashboard home
@@ -400,31 +400,15 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
             <tr>
               <th>Integration</th>
               <th>Purpose</th>
-              <th>Auth Type</th>
               <th>Status</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             ${integrations.map(i => `
               <tr>
-                <td><strong>${escapeHtml(i.name)}</strong></td>
+                <td><a href="${i.id === 'roam' ? '/dashboard/roam' : `/dashboard/integrations/${i.id}`}"><strong>${escapeHtml(i.name)}</strong></a></td>
                 <td class="text-muted">${escapeHtml(i.purpose)}</td>
-                <td><span class="badge badge-secondary">${i.authType}</span></td>
                 <td><span class="badge ${statusBadgeMap[i.status]}">${i.status}</span></td>
-                <td>
-                  ${i.authType === 'oauth' ? `
-                    ${i.status === 'connected' ? `
-                      <form method="post" action="/disconnect/${i.id}?redirect=/dashboard/auth" style="display: inline;">
-                        <button type="submit" class="btn btn-danger">Disconnect</button>
-                      </form>
-                    ` : `
-                      <a href="/connect/${i.id}" class="btn btn-primary">Connect</a>
-                    `}
-                  ` : i.id === 'roam' ? `
-                    <a href="/dashboard/roam" class="btn btn-secondary">Settings</a>
-                  ` : '<span class="text-muted">No auth needed</span>'}
-                </td>
               </tr>
             `).join('')}
           </tbody>
@@ -465,11 +449,109 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     return c.html(layout('Auth Status', content));
   });
 
+  // Generic integration settings page
+  app.get('/dashboard/integrations/:integrationId', async (c) => {
+    const integrationId = c.req.param('integrationId');
+    const auth = c.get('auth');
+
+    // Redirect to dedicated settings pages
+    if (integrationId === 'roam') {
+      return c.redirect('/dashboard/roam');
+    }
+
+    const integration = getIntegration(integrationId);
+    if (!integration) {
+      return c.html(layout('Not Found', '<h1>Integration not found</h1>'), 404);
+    }
+
+    const integrations = await getIntegrationsWithStatus(storage, auth.uid);
+    const integrationWithStatus = integrations.find(i => i.id === integrationId);
+    const status = integrationWithStatus?.status || 'never';
+    const saved = c.req.query('saved') === '1';
+    const note = await storage.getIntegrationNote(auth.uid, integrationId) || '';
+
+    const statusBadgeMap: Record<string, string> = {
+      connected: 'badge-success',
+      expired: 'badge-danger',
+      'never': 'badge-warning',
+      unavailable: 'badge-secondary',
+    };
+
+    const content = `
+      <h1>${escapeHtml(integration.name)} Settings</h1>
+      <p><a href="/dashboard/auth">&larr; Back to Auth Status</a></p>
+
+      ${saved ? `
+        <div class="card" style="background: #d4edda; border-left: 4px solid #155724; margin-bottom: 1rem;">
+          <p style="margin: 0; color: #155724;">Notes saved.</p>
+        </div>
+      ` : ''}
+
+      <div class="card">
+        <h3>Integration Info</h3>
+        <table>
+          <tr><td><strong>Name</strong></td><td>${escapeHtml(integration.name)}</td></tr>
+          <tr><td><strong>Purpose</strong></td><td>${escapeHtml(integration.purpose)}</td></tr>
+          <tr><td><strong>Auth Type</strong></td><td><span class="badge badge-secondary">${integration.authType}</span></td></tr>
+          <tr><td><strong>Status</strong></td><td><span class="badge ${statusBadgeMap[status]}">${status}</span></td></tr>
+        </table>
+        ${integration.authType === 'oauth' && status !== 'connected' ? `
+          <div style="margin-top: 1rem;">
+            <a href="/connect/${integrationId}" class="btn btn-primary">Connect</a>
+          </div>
+        ` : ''}
+        ${integration.authType === 'oauth' && status === 'connected' ? `
+          <div style="margin-top: 1rem;">
+            <form method="post" action="/disconnect/${integrationId}?redirect=/dashboard/integrations/${integrationId}" style="display: inline;">
+              <button type="submit" class="btn btn-danger">Disconnect</button>
+            </form>
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="card">
+        <h3>Notes</h3>
+        <p class="text-muted" style="margin-bottom: 0.75rem;">Notes captured about this integration. You can edit them here.</p>
+        <form method="post" action="/dashboard/integrations/${integrationId}/notes">
+          <textarea name="notes" rows="10" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; font-size: 0.875rem; resize: vertical;">${escapeHtml(note)}</textarea>
+          <div style="margin-top: 0.75rem;">
+            <button type="submit" class="btn btn-primary">Save Notes</button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    return c.html(layout(`${integration.name} Settings`, content));
+  });
+
+  // Save integration notes
+  app.post('/dashboard/integrations/:integrationId/notes', async (c) => {
+    const integrationId = c.req.param('integrationId');
+    const auth = c.get('auth');
+
+    const integration = getIntegration(integrationId);
+    if (!integration) {
+      return c.html(layout('Not Found', '<h1>Integration not found</h1>'), 404);
+    }
+
+    const body = await c.req.parseBody() as Record<string, string>;
+    const notes = body.notes || '';
+    await storage.saveIntegrationNote(auth.uid, integrationId, notes);
+
+    // Redirect to dedicated settings page if one exists
+    if (integrationId === 'roam') {
+      return c.redirect('/dashboard/roam?saved=1');
+    }
+    return c.redirect(`/dashboard/integrations/${integrationId}?saved=1`);
+  });
+
   // Roam settings page
   app.get('/dashboard/roam', async (c) => {
     const auth = c.get('auth');
     const roamConfig = await storage.getRoamConfig(auth.uid);
     const error = c.req.query('error');
+    const saved = c.req.query('saved') === '1';
+    const roamNote = await storage.getIntegrationNote(auth.uid, 'roam') || '';
 
     const errorBanner = error ? `
       <div class="card" style="background: #fee; border-left: 4px solid #c00; margin-bottom: 1rem;">
@@ -481,11 +563,18 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       </div>
     ` : '';
 
+    const savedBanner = saved ? `
+      <div class="card" style="background: #d4edda; border-left: 4px solid #155724; margin-bottom: 1rem;">
+        <p style="margin: 0; color: #155724;">Notes saved.</p>
+      </div>
+    ` : '';
+
     const content = `
       <h1>Roam Research Settings</h1>
       <p><a href="/dashboard/auth">&larr; Back to Auth Status</a></p>
 
       ${errorBanner}
+      ${savedBanner}
 
       <div class="card">
         <h3>Connected Graphs</h3>
@@ -525,6 +614,17 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
               <input type="password" id="token" name="token" placeholder="roam-graph-token-..." required style="width: 300px;">
             </div>
             <button type="submit" id="roam-connect-btn" class="btn btn-primary">Connect</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Notes</h3>
+        <p class="text-muted" style="margin-bottom: 0.75rem;">Notes captured about this integration. You can edit them here.</p>
+        <form method="post" action="/dashboard/integrations/roam/notes">
+          <textarea name="notes" rows="10" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; font-size: 0.875rem; resize: vertical;">${escapeHtml(roamNote)}</textarea>
+          <div style="margin-top: 0.75rem;">
+            <button type="submit" class="btn btn-primary">Save Notes</button>
           </div>
         </form>
       </div>
