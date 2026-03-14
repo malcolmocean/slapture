@@ -10,6 +10,9 @@ import { Mastermind, IntegrationContext } from '../mastermind/index.js';
 import { Evolver, EvolverContext, TieredValidationResult } from '../mastermind/evolver.js';
 import { createEvolverTestCase } from '../mastermind/evolver-ratchet.js';
 import { getIntegrationsWithStatus, INTEGRATIONS } from '../integrations/registry.js';
+import { RoamClient } from '../integrations/roam/client.js';
+import { listPages } from '../integrations/roam/toolkit.js';
+import type { RoamContextEntry } from '../mastermind/index.js';
 import { Validator } from '../validation/index.js';
 import { RouteHygiene, HygieneSignal } from '../hygiene/index.js';
 
@@ -419,11 +422,37 @@ export class CapturePipeline {
       }
     }
 
+    const roamIntegration = integrations.find(i => i.id === 'roam');
+    let roamContext: IntegrationContext['roamContext'];
+
+    if (roamIntegration?.status === 'connected') {
+      try {
+        const roamConfig = await this.storage.getRoamConfig(username);
+        if (roamConfig?.graphs.length) {
+          const graphs: RoamContextEntry[] = [];
+          for (const graph of roamConfig.graphs) {
+            try {
+              const client = new RoamClient(graph.graphName, graph.token);
+              const pages = await listPages(client);
+              graphs.push({ graphName: graph.graphName, pages });
+            } catch (error) {
+              console.error(`[Pipeline] Failed to fetch Roam pages for graph ${graph.graphName}:`, error);
+              graphs.push({ graphName: graph.graphName, pages: [] });
+            }
+          }
+          roamContext = { graphs };
+        }
+      } catch (error) {
+        console.error('[Pipeline] Failed to fetch Roam context:', error);
+      }
+    }
+
     return {
       integrations,
       integrationNotes,
       destinationNotes,
       sheetsContext,
+      roamContext,
     };
   }
 

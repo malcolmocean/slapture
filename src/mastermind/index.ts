@@ -13,12 +13,20 @@ export interface SheetsContextEntry {
   }>;
 }
 
+export interface RoamContextEntry {
+  graphName: string;
+  pages: string[];
+}
+
 export interface IntegrationContext {
   integrations: IntegrationWithStatus[];
   integrationNotes: Map<string, string>;  // integrationId -> note content
   destinationNotes: Map<string, string>;  // destinationId -> note content
   sheetsContext?: {
     spreadsheets: SheetsContextEntry[];
+  };
+  roamContext?: {
+    graphs: RoamContextEntry[];
   };
 }
 
@@ -92,6 +100,15 @@ ${noteLines.join('\n')}`;
       }).join('\n');
 
       section += `\n\nYour Google Sheets (recently accessed):\n${sheetLines}`;
+    }
+
+    if (context.roamContext?.graphs.length) {
+      const roamLines = context.roamContext.graphs.map(g => {
+        const pageList = g.pages.slice(0, 50).join(', ');
+        const suffix = g.pages.length > 50 ? `, ... (${g.pages.length} total)` : '';
+        return `  Graph "${g.graphName}": ${pageList}${suffix}`;
+      }).join('\n');
+      section += `\n\nYour Roam Research graphs:\n${roamLines}`;
     }
 
     section += `
@@ -208,6 +225,28 @@ LookupSpec: {axis: "row"|"col", at: <index>, valueSource: <ValueSpec>, match: "e
 Prefer Google Sheets over local CSV files when the user has Sheets connected and the data is tabular/structured.
 Use spreadsheet IDs from the "Your Google Sheets" list when a matching spreadsheet already exists.
 Inspect headers to determine the right operation and column mapping.
+
+### "roam" - Roam Research
+destinationConfig: {graphName: "<graph name from list>", operation: <operation>}
+No transformScript needed — the Roam executor handles everything.
+
+Operations:
+- daily_tagged: Write to today's daily page under a tag.
+  operation: {type: "daily_tagged", tag: "<tag name>"}
+  Creates: #tag as child of today's page, then capture text as child of tag block.
+  If #tag already exists on today's page, appends as sibling of existing entries.
+  Use for: daily logging, journal-style entries, anything time-organized.
+
+- page_child: Append as child of a named page.
+  operation: {type: "page_child", pageTitle: "<page title>"}
+  Creates the page if it doesn't exist.
+  Use for: lists, collections, reference material that lives on its own page.
+
+graphName is set at the destinationConfig level (not inside operation).
+When choosing a graph, look at which graph contains matching pages in the list above.
+Daily page UIDs are deterministic — no lookup needed.
+Fuzzy-match page names (singular/plural, with/without hash/brackets).
+The capture payload should include [[page refs]] where you identify existing pages that are referenced (e.g. person names, topics).
 
 When creating routes for "log X to Y" patterns:
 1. Extract the filename (e.g., "gwen_memories.csv")
