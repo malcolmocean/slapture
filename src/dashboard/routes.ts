@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import type { StorageInterface } from '../storage/interface.js';
 import { layout, escapeHtml, formatDate, statusBadge, verificationBadge, renderPipeline, renderPipelineHero, relativeTime } from './templates.js';
 import { getIntegration, getIntegrationsWithStatus } from '../integrations/registry.js';
+import { getDefaultRouteStatuses } from '../integrations/default-routes.js';
 
 export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void {
   // Dashboard home
@@ -499,6 +500,68 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     const integrations = await getIntegrationsWithStatus(storage, auth.uid);
     const blocked = await storage.listCapturesNeedingAuth(auth.uid);
 
+    const defaultRoutesAdded = c.req.query('defaultRoutes');
+    const defaultRoutesBanner = defaultRoutesAdded ? `
+      <div class="card" style="background: #efe; border-left: 4px solid #0a0; margin-bottom: 1rem;">
+        <p style="margin: 0; color: #060;">
+          ${defaultRoutesAdded} default route${defaultRoutesAdded === '1' ? '' : 's'} auto-added.
+        </p>
+      </div>
+    ` : '';
+
+    const integrationsWithDefaults = integrations.filter(
+      i => i.status === 'connected' && getIntegration(i.id)?.defaultRoutes?.length
+    );
+    let defaultRoutesSection = '';
+    if (integrationsWithDefaults.length > 0) {
+      const allStatuses = await Promise.all(
+        integrationsWithDefaults.map(async i => ({
+          integration: i,
+          statuses: await getDefaultRouteStatuses(i.id, storage),
+        }))
+      );
+
+      const rows = allStatuses.flatMap(({ integration, statuses }) =>
+        statuses.map(s => {
+          const stateDisplay = s.state === 'active'
+            ? '<span class="badge badge-success">active</span>'
+            : s.state === 'modified'
+            ? '<span class="badge badge-warning">customized</span>'
+            : '<span class="badge badge-danger">removed</span>';
+
+          const action = s.state === 'active'
+            ? '<span class="text-muted">No action needed</span>'
+            : `<form method="post" action="/dashboard/default-routes/${integration.id}/${s.template.key}/restore" style="display: inline;"
+                ${s.state === 'modified' ? 'onsubmit="return confirm(\'This will overwrite your customizations. Continue?\')"' : ''}>
+                <button type="submit" class="btn btn-secondary">
+                  ${s.state === 'modified' ? 'Reset to default' : 'Re-add'}
+                </button>
+              </form>`;
+
+          return `<tr>
+            <td><strong>${escapeHtml(integration.name)}</strong></td>
+            <td>${escapeHtml(s.template.description)}</td>
+            <td>${stateDisplay}</td>
+            <td>${action}</td>
+          </tr>`;
+        })
+      );
+
+      if (rows.length > 0) {
+        defaultRoutesSection = `
+          <div class="card">
+            <h3>Default Routes</h3>
+            <table>
+              <thead>
+                <tr><th>Integration</th><th>Route</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody>${rows.join('')}</tbody>
+            </table>
+          </div>
+        `;
+      }
+    }
+
     const statusBadgeMap: Record<string, string> = {
       connected: 'badge-success',
       expired: 'badge-danger',
@@ -507,6 +570,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
 
     const content = `
       <h1>Integrations</h1>
+      ${defaultRoutesBanner}
 
       <div class="card">
         <h3>Connected Services</h3>
@@ -529,6 +593,8 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
           </tbody>
         </table>
       </div>
+
+      ${defaultRoutesSection}
 
       <div class="card">
         <h3>Blocked Captures</h3>
