@@ -149,6 +149,9 @@ export function layout(title: string, content: string): string {
       background: white;
       padding: 0.25rem 0.5rem;
       border-radius: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .trigger-live { color: #28a745; }
     .trigger-draft { color: #ffc107; }
@@ -297,9 +300,15 @@ export function renderDestinationDetails(route: Route): string {
   switch (route.destinationType) {
     case 'fs':
       return `<div style="font-size: 0.85rem; color: #555;">${escapeHtml(String(config.filePath || ''))}</div>`;
-    case 'sheets':
-      return `<div style="font-size: 0.85rem; color: #555;">${escapeHtml(String(config.spreadsheetId || ''))}</div>
-              <div style="font-size: 0.75rem; color: #888;">Sheet: "${escapeHtml(String(config.sheetName || ''))}"</div>`;
+    case 'sheets': {
+      const ssId = String(config.spreadsheetId || '');
+      const ssName = config.spreadsheetName ? String(config.spreadsheetName) : null;
+      const ssLabel = ssId.length > 12 ? ssId.slice(0, 12) + '…' : ssId;
+      return `${ssName
+        ? `<div style="font-size: 0.85rem; color: #555;">${escapeHtml(ssName)}</div>`
+        : `<div style="font-size: 0.7rem; color: #aaa;" title="${escapeHtml(ssId)}"><code>${escapeHtml(ssLabel)}</code></div>`
+      }`;
+    }
     case 'roam': {
       const graph = String(config.graphName || '');
       const op = (config.operation || {}) as Record<string, unknown>;
@@ -331,7 +340,7 @@ export function renderPipelineHero(route: Route, integrationStatus: string): str
         const draftLabel = status === 'draft'
           ? ' <span style="font-size: 0.65rem; color: #999;">(draft)</span>'
           : '';
-        return `<div class="trigger-item">${dot} ${escapeHtml(t.pattern)}${draftLabel}</div>`;
+        return `<div class="trigger-item" title="${escapeHtml(t.pattern)}">${dot} ${escapeHtml(t.pattern)}${draftLabel}</div>`;
       }).join('');
 
   // Transform box (only if transformScript exists)

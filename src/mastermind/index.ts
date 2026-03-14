@@ -202,7 +202,7 @@ Use target "destination" when the note is ABOUT a specific route/destination.
 The "id" field is the integration ID (e.g., "intend") or the route name (e.g., "gwen_memories").
 
 ### "sheets" - Google Sheets
-destinationConfig: {spreadsheetId: "<id from spreadsheet list>", sheetName: "<tab name>", operation: <operation>}
+destinationConfig: {spreadsheetId: "<id from spreadsheet list>", spreadsheetName: "<human-readable name>", sheetName: "<tab name>", operation: <operation>}
 No transformScript needed - the sheets executor handles everything declaratively.
 
 Operations:

@@ -93,6 +93,7 @@ export interface NotesDestinationConfig {
  */
 export interface SheetsDestinationConfig {
   spreadsheetId: string;
+  spreadsheetName?: string;  // Human-readable name, populated by mastermind
   sheetName: string;
   operation: unknown;  // Full type: SheetsOperation from sheets-executor.ts
 }
