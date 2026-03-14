@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { renderLlmInteractions, renderPipeline, escapeHtml } from '../../src/dashboard/templates.js';
-import type { ExecutionStep } from '../../src/types.js';
+import { renderLlmInteractions, renderPipeline, escapeHtml, renderPipelineHero, renderDestinationDetails, relativeTime } from '../../src/dashboard/templates.js';
+import type { ExecutionStep, Route } from '../../src/types.js';
 
 function makeStep(overrides: Partial<ExecutionStep> & Pick<ExecutionStep, 'step' | 'input' | 'output'>): ExecutionStep {
   return {
@@ -223,5 +223,77 @@ describe('renderLlmInteractions', () => {
 
     // Must contain escaped versions
     expect(html).toContain(escapeHtml(xss));
+  });
+});
+
+describe('renderPipelineHero', () => {
+  it('renders matchers, transform, and destination boxes', () => {
+    const route = {
+      id: 'r1', name: 'Test', description: 'Test route',
+      triggers: [
+        { type: 'regex' as const, pattern: '^gwen\\b', priority: 1, fireCount: 5 },
+        { type: 'regex' as const, pattern: 'baby.*memory', priority: 0, fireCount: 0 },
+      ],
+      destinationType: 'sheets' as const,
+      destinationConfig: { spreadsheetId: 'abc123', sheetName: 'Sheet1', operation: { type: 'append_row', columnMappings: [] } },
+      transformScript: 'result = payload.replace(/^gwen /i, "")',
+      schema: null,
+      recentItems: [],
+      createdAt: new Date().toISOString(),
+      createdBy: 'mastermind' as const,
+      lastUsed: null,
+    };
+    const html = renderPipelineHero(route, 'connected');
+    expect(html).toContain('box-matchers');
+    expect(html).toContain('^gwen\\b');
+    expect(html).toContain('box-transform');
+    expect(html).toContain('box-destination');
+    expect(html).toContain('sheets');
+    expect(html).toContain('Connected ✓');
+  });
+
+  it('omits transform box when no transformScript', () => {
+    const route = {
+      id: 'r2', name: 'No Transform', description: '',
+      triggers: [{ type: 'regex' as const, pattern: 'test', priority: 1, fireCount: 0 }],
+      destinationType: 'notes' as const,
+      destinationConfig: { target: 'integration', id: 'notes' },
+      transformScript: null,
+      schema: null,
+      recentItems: [],
+      createdAt: new Date().toISOString(),
+      createdBy: 'user' as const,
+      lastUsed: null,
+    };
+    const html = renderPipelineHero(route, 'connected');
+    expect(html).not.toContain('box-transform');
+    expect(html).toContain('box-destination');
+  });
+
+  it('shows roam destination details with page_child operation', () => {
+    const route = {
+      id: 'r3', name: 'Roam', description: '',
+      triggers: [{ type: 'regex' as const, pattern: 'test', priority: 1, fireCount: 0 }],
+      destinationType: 'roam' as const,
+      destinationConfig: { graphName: 'my-graph', operation: { type: 'page_child', pageTitle: 'My Page' } },
+      transformScript: null,
+      schema: null,
+      recentItems: [],
+      createdAt: new Date().toISOString(),
+      createdBy: 'user' as const,
+      lastUsed: null,
+    };
+    const html = renderPipelineHero(route, 'connected');
+    expect(html).toContain('my-graph');
+    expect(html).toContain('Page: My Page');
+  });
+});
+
+describe('relativeTime', () => {
+  it('formats recent times', () => {
+    const now = new Date();
+    expect(relativeTime(new Date(now.getTime() - 30000).toISOString())).toBe('just now');
+    expect(relativeTime(new Date(now.getTime() - 3600000).toISOString())).toBe('1h ago');
+    expect(relativeTime(new Date(now.getTime() - 86400000 * 3).toISOString())).toBe('3d ago');
   });
 });

@@ -1,4 +1,5 @@
 import type { ExecutionStep, Route } from '../types.js';
+import { getTriggerStatus } from '../types.js';
 
 export function layout(title: string, content: string): string {
   return `<!DOCTYPE html>
@@ -105,6 +106,97 @@ export function layout(title: string, content: string): string {
     details.llm-raw summary { cursor: pointer; font-size: 0.875rem; color: #666; padding: 0.25rem 0; }
     details.llm-raw summary:hover { color: #333; }
     details.llm-raw pre { margin-top: 0.5rem; background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.75rem; max-height: 500px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+
+    /* Pipeline hero */
+    .pipeline-flow {
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+    .pipeline-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      color: #bbb;
+      padding: 0 0.75rem;
+    }
+    .pipeline-arrow .v-arrow { display: none; }
+    .pipeline-box {
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      min-width: 180px;
+      flex: 1;
+      max-width: 280px;
+    }
+    .pipeline-box-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .box-matchers { background: #e8f4fd; border: 2px solid #4a9eca; }
+    .box-matchers .pipeline-box-label { color: #4a9eca; }
+    .box-transform { background: #fff3e0; border: 2px dashed #ff9800; }
+    .box-transform .pipeline-box-label { color: #ff9800; }
+    .box-destination { background: #e8f5e9; border: 2px solid #4caf50; }
+    .box-destination .pipeline-box-label { color: #4caf50; }
+    .trigger-item {
+      font-family: monospace;
+      font-size: 0.8rem;
+      margin-bottom: 0.25rem;
+      background: white;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+    }
+    .trigger-live { color: #28a745; }
+    .trigger-draft { color: #ffc107; }
+    .meta-line {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #999;
+      margin-bottom: 1.5rem;
+    }
+    .meta-badge {
+      background: #e3f2fd;
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+      font-size: 0.7rem;
+    }
+    .dest-type-badge {
+      background: #c8e6c9;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .transform-arrow { color: #ccc; padding: 0 0.35rem; }
+    .transform-output { color: #888; font-style: italic; }
+    .verified-badge {
+      background: #d1ecf1;
+      color: #0c5460;
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+      font-size: 0.65rem;
+      margin-left: 0.25rem;
+    }
+
+    @media (max-width: 700px) {
+      .pipeline-flow {
+        flex-direction: column;
+        align-items: center;
+      }
+      .pipeline-arrow {
+        padding: 0.25rem 0;
+      }
+      .pipeline-arrow .h-arrow { display: none; }
+      .pipeline-arrow .v-arrow { display: block; }
+      .pipeline-box {
+        max-width: 100%;
+        width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
@@ -182,6 +274,110 @@ export function verificationBadge(state: string): string {
     pending: 'Pending',
   };
   return `<span class="badge ${classes[state] || 'badge-secondary'}">${labels[state] || state}</span>`;
+}
+
+export function relativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  const diffWeeks = Math.floor(diffDays / 7);
+  if (diffWeeks < 5) return `${diffWeeks}w ago`;
+  return formatDate(dateStr);
+}
+
+export function renderDestinationDetails(route: Route): string {
+  const config = route.destinationConfig as Record<string, unknown>;
+  switch (route.destinationType) {
+    case 'fs':
+      return `<div style="font-size: 0.85rem; color: #555;">${escapeHtml(String(config.filePath || ''))}</div>`;
+    case 'sheets':
+      return `<div style="font-size: 0.85rem; color: #555;">${escapeHtml(String(config.spreadsheetId || ''))}</div>
+              <div style="font-size: 0.75rem; color: #888;">Sheet: "${escapeHtml(String(config.sheetName || ''))}"</div>`;
+    case 'roam': {
+      const graph = String(config.graphName || '');
+      const op = (config.operation || {}) as Record<string, unknown>;
+      const opType = String(op.type || 'daily_tagged');
+      const detail = opType === 'page_child'
+        ? 'Page: ' + escapeHtml(String(op.pageTitle || ''))
+        : 'Daily page (tagged)';
+      return `<div style="font-size: 0.85rem; color: #555;">${escapeHtml(graph)}</div>
+              <div style="font-size: 0.75rem; color: #888;">${detail}</div>`;
+    }
+    case 'intend':
+      return `<div style="font-size: 0.85rem; color: #555;">${escapeHtml(String(config.baseUrl || ''))}</div>`;
+    case 'notes':
+      return `<div style="font-size: 0.85rem; color: #555;">Notes</div>`;
+    default:
+      return `<div style="font-size: 0.85rem; color: #555;">${escapeHtml(route.destinationType)}</div>`;
+  }
+}
+
+export function renderPipelineHero(route: Route, integrationStatus: string): string {
+  // Matchers box (data model still calls them 'triggers')
+  const triggersHtml = route.triggers.length === 0
+    ? '<div class="trigger-item" style="color: #999;">No matchers</div>'
+    : route.triggers.map(t => {
+        const status = getTriggerStatus(t);
+        const dot = status === 'draft'
+          ? '<span class="trigger-draft">○</span>'
+          : '<span class="trigger-live">●</span>';
+        const draftLabel = status === 'draft'
+          ? ' <span style="font-size: 0.65rem; color: #999;">(draft)</span>'
+          : '';
+        return `<div class="trigger-item">${dot} ${escapeHtml(t.pattern)}${draftLabel}</div>`;
+      }).join('');
+
+  // Transform box (only if transformScript exists)
+  const transformHtml = route.transformScript ? `
+    <div class="pipeline-arrow">
+      <span class="h-arrow">→</span>
+      <span class="v-arrow">↓</span>
+    </div>
+    <div class="pipeline-box box-transform">
+      <div class="pipeline-box-label">Transform</div>
+      <div style="font-size: 0.8rem; color: #666;">${
+        route.transformScript.length <= 60
+          ? escapeHtml(route.transformScript)
+          : 'Custom transform'
+      }</div>
+    </div>` : '';
+
+  // Destination box
+  const destDetails = renderDestinationDetails(route);
+  const connectionStatus = integrationStatus === 'connected'
+    ? '<div style="font-size: 0.75rem; color: #888; margin-top: 0.25rem;">Connected ✓</div>'
+    : integrationStatus === 'expired'
+      ? '<div style="font-size: 0.75rem; color: #dc3545; margin-top: 0.25rem;">Expired ✗</div>'
+      : '';
+
+  // Build middle section: either [arrow, transform, arrow] or just [arrow]
+  const middleHtml = transformHtml
+    ? `${transformHtml}<div class="pipeline-arrow"><span class="h-arrow">→</span><span class="v-arrow">↓</span></div>`
+    : '<div class="pipeline-arrow"><span class="h-arrow">→</span><span class="v-arrow">↓</span></div>';
+
+  return `
+    <div class="pipeline-flow">
+      <div class="pipeline-box box-matchers">
+        <div class="pipeline-box-label">Matchers</div>
+        ${triggersHtml}
+      </div>
+      ${middleHtml}
+      <div class="pipeline-box box-destination">
+        <div class="pipeline-box-label">Destination</div>
+        <div style="margin-bottom: 0.35rem;">
+          <span class="dest-type-badge">${escapeHtml(route.destinationType)}</span>
+        </div>
+        ${destDetails}
+        ${connectionStatus}
+      </div>
+    </div>`;
 }
 
 const LLM_STEPS = ['route_validate', 'mastermind', 'evolve'] as const;
