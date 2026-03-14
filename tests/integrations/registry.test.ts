@@ -14,8 +14,8 @@ const TEST_DATA_DIR = './test-data-registry';
 
 describe('Integration Registry', () => {
   describe('INTEGRATIONS constant', () => {
-    it('should have exactly 4 integrations', () => {
-      expect(INTEGRATIONS).toHaveLength(4);
+    it('should have exactly 5 integrations', () => {
+      expect(INTEGRATIONS).toHaveLength(5);
     });
 
     it('should have intend integration with correct properties', () => {
@@ -94,7 +94,7 @@ describe('Integration Registry', () => {
 
     it('should return all integrations with status', async () => {
       const integrations = await getIntegrationsWithStatus(storage, 'testuser');
-      expect(integrations).toHaveLength(4);
+      expect(integrations).toHaveLength(5);
 
       // Each should have status field
       for (const integration of integrations) {

@@ -40,6 +40,12 @@ export const INTEGRATIONS: Integration[] = [
     purpose: 'Capture data to Google Sheets - supports cell updates, row appends, and 2D lookups with fuzzy matching',
     authType: 'oauth',
   },
+  {
+    id: 'roam',
+    name: 'Roam Research',
+    purpose: 'Create blocks and pages in Roam graphs — daily pages, tagged entries, structured notes',
+    authType: 'api-key',
+  },
 ];
 
 /**
@@ -88,6 +94,9 @@ export async function getIntegrationsWithStatus(
     } else if (integration.id === 'sheets') {
       const tokens = await storage.getSheetsTokens(username);
       status = tokens ? 'connected' : 'never';
+    } else if (integration.id === 'roam') {
+      const roamConfig = await storage.getRoamConfig(username);
+      status = roamConfig?.graphs?.length ? 'connected' : 'never';
     } else {
       // Default for unknown oauth/api-key integrations
       status = 'never';
