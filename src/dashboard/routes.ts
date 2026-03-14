@@ -2,7 +2,7 @@ import type { Hono } from 'hono';
 import type { StorageInterface } from '../storage/interface.js';
 import { layout, escapeHtml, formatDate, statusBadge, verificationBadge, renderPipeline, renderPipelineHero, relativeTime } from './templates.js';
 import { getIntegration, getIntegrationsWithStatus } from '../integrations/registry.js';
-import { getDefaultRouteStatuses } from '../integrations/default-routes.js';
+import { getDefaultRouteStatuses, restoreDefaultRoute } from '../integrations/default-routes.js';
 
 export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void {
   // Dashboard home
@@ -628,6 +628,20 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     `;
 
     return c.html(layout('Integrations', content));
+  });
+
+  // Restore/re-add a default route
+  app.post('/dashboard/default-routes/:integrationId/:key/restore', async (c) => {
+    const auth = c.get('auth');
+    const { integrationId, key } = c.req.param();
+
+    try {
+      await restoreDefaultRoute(integrationId, key, storage);
+      return c.redirect('/dashboard/auth');
+    } catch (error) {
+      console.error('[Dashboard] Failed to restore default route:', error);
+      return c.redirect('/dashboard/auth');
+    }
   });
 
   // Generic integration settings page
