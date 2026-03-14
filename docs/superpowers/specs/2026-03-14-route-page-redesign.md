@@ -17,10 +17,13 @@ Redesign the route detail page from flat tables to a pipeline-hero layout that v
 
 A visual flow diagram at the top of the route detail page, showing three boxes connected by arrows:
 
-**Triggers box** (blue, solid border)
+**Matchers box** (blue, solid border)
+- Label says "Matchers" in the UI (data model still uses `triggers` internally — rename is a future task)
 - Lists all triggers with live/draft status indicators
-- Green dot (●) for live triggers, yellow dot (○) for draft triggers
+- Green dot (●) for live matchers, yellow dot (○) for draft matchers
 - Shows pattern in monospace
+
+> **Future:** Rename `triggers` → `matchers` in the data model. "Trigger" implies an event (e.g., "new RSS post"), while "matcher" better describes pattern-matching against input. Keeping the data model as-is for now to avoid a migration.
 
 **Transform box** (orange, dashed border)
 - Only shown if `transformScript` is non-null
@@ -56,7 +59,7 @@ Use `<details>/<summary>` elements (already used elsewhere in the dashboard for 
 - Columns: Time | Input → Output | Matched | Status
 - Each row shows the raw input, then on a second line `↳` the transformed output (from `capture.transformedPayload`)
 - If transform didn't change the input (or `transformedPayload` is null/same as raw), show "(unchanged)" label
-- "Matched" column shows which trigger pattern matched (from `capture.matchedTrigger`), with draft highlight. For captures that predate this field (no `matchedTrigger` stored), show "—"
+- "Matched" column shows which matcher pattern matched (from `capture.matchedTrigger`), with draft highlight. For captures that predate this field (no `matchedTrigger` stored), show "—"
 - Verified captures get a "verified" badge
 - "View all N captures →" links to `/dashboard/captures?route={routeId}` (requires adding route filter support to the captures list page)
 - Cap at 10 rows in the accordion

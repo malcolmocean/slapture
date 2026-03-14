@@ -8,6 +8,8 @@
 
 **Tech Stack:** TypeScript, Hono, server-rendered HTML templates (no framework), Vitest (unit), Playwright (E2E)
 
+**UI terminology:** The pipeline hero uses "Matchers" (not "Triggers") as the UI label. The data model still uses `triggers` internally — a full rename (`triggers` → `matchers`) is a future task to avoid migration churn now. "Trigger" sounds like an event; "Matcher" better describes pattern-matching against input text.
+
 **Important context on transforms:**
 - Existing `fs` destination transforms are **imperative I/O scripts** that call `fs.appendFileSync(filePath, payload + '\n')` etc. They write to files directly via a sandboxed `fs` object. They do NOT return a transformed string.
 - New pipeline-level transforms use the `result = ...` convention: `result = payload.replace(/^gwen\s+/i, "")`. These are pure string transforms.
@@ -363,8 +365,8 @@ Add these styles inside the `<style>` block in the `layout()` function:
   font-weight: 600;
   margin-bottom: 0.5rem;
 }
-.box-triggers { background: #e8f4fd; border: 2px solid #4a9eca; }
-.box-triggers .pipeline-box-label { color: #4a9eca; }
+.box-matchers { background: #e8f4fd; border: 2px solid #4a9eca; }
+.box-matchers .pipeline-box-label { color: #4a9eca; }
 .box-transform { background: #fff3e0; border: 2px dashed #ff9800; }
 .box-transform .pipeline-box-label { color: #ff9800; }
 .box-destination { background: #e8f5e9; border: 2px solid #4caf50; }
@@ -488,9 +490,9 @@ import type { ExecutionStep, Route } from '../types.js';
 import { getTriggerStatus } from '../types.js';  // add this import
 
 export function renderPipelineHero(route: Route, integrationStatus: string): string {
-  // Triggers box
+  // Matchers box (data model still calls them 'triggers')
   const triggersHtml = route.triggers.length === 0
-    ? '<div class="trigger-item" style="color: #999;">No triggers</div>'
+    ? '<div class="trigger-item" style="color: #999;">No matchers</div>'
     : route.triggers.map(t => {
         const status = getTriggerStatus(t);
         const dot = status === 'draft'
@@ -527,8 +529,8 @@ export function renderPipelineHero(route: Route, integrationStatus: string): str
 
   return `
     <div class="pipeline-flow">
-      <div class="pipeline-box box-triggers">
-        <div class="pipeline-box-label">Triggers</div>
+      <div class="pipeline-box box-matchers">
+        <div class="pipeline-box-label">Matchers</div>
         ${triggersHtml}
       </div>
       <div class="pipeline-arrow">
@@ -563,7 +565,7 @@ In `tests/unit/dashboard-templates.test.ts`, add:
 import { renderPipelineHero, renderDestinationDetails, relativeTime } from '../../src/dashboard/templates.js';
 
 describe('renderPipelineHero', () => {
-  it('renders triggers, transform, and destination boxes', () => {
+  it('renders matchers, transform, and destination boxes', () => {
     const route = {
       id: 'r1', name: 'Test', description: 'Test route',
       triggers: [
@@ -579,7 +581,7 @@ describe('renderPipelineHero', () => {
       lastUsed: null,
     };
     const html = renderPipelineHero(route, 'connected');
-    expect(html).toContain('box-triggers');
+    expect(html).toContain('box-matchers');
     expect(html).toContain('^gwen\\b');
     expect(html).toContain('box-transform');
     expect(html).toContain('box-destination');
@@ -720,7 +722,7 @@ test.describe('Route Detail (redesigned)', () => {
     await loginAsTestUser(page);
   });
 
-  test('shows pipeline hero with triggers and destination', async ({ page }) => {
+  test('shows pipeline hero with matchers and destination', async ({ page }) => {
     await page.goto('/dashboard/routes');
     const firstRoute = page.locator('table tbody tr td a').first();
     if (await firstRoute.count() === 0) {
@@ -729,7 +731,7 @@ test.describe('Route Detail (redesigned)', () => {
     }
     await firstRoute.click();
 
-    await expect(page.locator('.box-triggers')).toBeVisible();
+    await expect(page.locator('.box-matchers')).toBeVisible();
     await expect(page.locator('.box-destination')).toBeVisible();
     await expect(page.locator('.pipeline-arrow')).toBeVisible();
     await expect(page.locator('.meta-line')).toBeVisible();
