@@ -391,10 +391,10 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     };
 
     const content = `
-      <h1>Auth Status</h1>
+      <h1>Integrations</h1>
 
       <div class="card">
-        <h3>Integrations</h3>
+        <h3>Connected Services</h3>
         <table>
           <thead>
             <tr>
@@ -446,7 +446,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       </div>
     `;
 
-    return c.html(layout('Auth Status', content));
+    return c.html(layout('Integrations', content));
   });
 
   // Generic integration settings page
@@ -479,7 +479,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
 
     const content = `
       <h1>${escapeHtml(integration.name)} Settings</h1>
-      <p><a href="/dashboard/auth">&larr; Back to Auth Status</a></p>
+      <p><a href="/dashboard/auth">&larr; Back to Integrations</a></p>
 
       ${saved ? `
         <div class="card" style="background: #d4edda; border-left: 4px solid #155724; margin-bottom: 1rem;">
@@ -571,7 +571,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
 
     const content = `
       <h1>Roam Research Settings</h1>
-      <p><a href="/dashboard/auth">&larr; Back to Auth Status</a></p>
+      <p><a href="/dashboard/auth">&larr; Back to Integrations</a></p>
 
       ${errorBanner}
       ${savedBanner}

@@ -13,7 +13,7 @@ test.describe('Dashboard', () => {
     // Check nav links specifically
     await expect(page.locator('nav').getByRole('link', { name: /captures/i })).toBeVisible();
     await expect(page.locator('nav').getByRole('link', { name: /routes/i })).toBeVisible();
-    await expect(page.locator('nav').getByRole('link', { name: /auth/i })).toBeVisible();
+    await expect(page.locator('nav').getByRole('link', { name: /integrations/i })).toBeVisible();
   });
 
   test('dashboard requires auth token', async ({ page }) => {
@@ -126,7 +126,7 @@ test.describe('Route Management', () => {
   });
 });
 
-test.describe('Auth Status', () => {
+test.describe('Integrations', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsTestUser(page);
   });
@@ -134,7 +134,7 @@ test.describe('Auth Status', () => {
   test('shows integration status list', async ({ page }) => {
     await page.goto(`/dashboard/auth`);
 
-    await expect(page.locator('h1')).toContainText('Auth Status');
+    await expect(page.locator('h1')).toContainText('Integrations');
     // Should show integrations
     await expect(page.locator('text=intend.do')).toBeVisible();
     await expect(page.locator('text=Local Files')).toBeVisible();
