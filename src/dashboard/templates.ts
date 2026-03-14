@@ -115,6 +115,7 @@ export function layout(title: string, content: string): string {
     <a href="/dashboard/routes">Routes</a>
     <a href="/dashboard/reviews">Reviews</a>
     <a href="/dashboard/auth">Auth Status</a>
+    <a href="/dashboard/api-keys">API Keys</a>
     <a href="/dashboard/test-suite">Test Suite</a>
   </nav>
   <main>

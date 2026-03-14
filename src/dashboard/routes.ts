@@ -642,6 +642,145 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     return c.html(layout('Roam Settings', content));
   });
 
+  // API Keys settings page
+  app.get('/dashboard/api-keys', async (c) => {
+    const auth = c.get('auth');
+    const keys = await storage.listApiKeys(auth.uid);
+    const created = c.req.query('created');
+    const revoked = c.req.query('revoked') === '1';
+
+    const content = `
+      <h1>API Keys</h1>
+      <p class="text-muted" style="margin-bottom: 1.5rem;">
+        API keys let you post captures from scripts, shortcuts, and other tools without browser auth.
+      </p>
+
+      ${created ? `
+        <div class="card" style="background: #d4edda; border-left: 4px solid #155724; margin-bottom: 1rem;">
+          <p style="margin: 0 0 0.5rem; color: #155724;"><strong>Key created!</strong> Copy it now — you won't see it again.</p>
+          <code style="display: block; padding: 0.75rem; background: #fff; border: 1px solid #c3e6cb; border-radius: 4px; word-break: break-all; font-size: 0.875rem;">${escapeHtml(created)}</code>
+          <p style="margin: 0.5rem 0 0; font-size: 0.8rem; color: #155724;">
+            Use it as: <code>curl -X POST ${escapeHtml(process.env.CALLBACK_BASE_URL || 'http://localhost:4444')}/capture -H "X-API-Key: YOUR_KEY" -H "Content-Type: application/json" -d '{"text":"hello"}'</code>
+          </p>
+        </div>
+      ` : ''}
+
+      ${revoked ? `
+        <div class="card" style="background: #d4edda; border-left: 4px solid #155724; margin-bottom: 1rem;">
+          <p style="margin: 0; color: #155724;">Key revoked.</p>
+        </div>
+      ` : ''}
+
+      <div class="card">
+        <h3>Create New Key</h3>
+        <form method="post" action="/dashboard/api-keys/create">
+          <div style="display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap;">
+            <div>
+              <label for="keyName">Name</label>
+              <input type="text" id="keyName" name="name" placeholder="e.g. ios-shortcut" required
+                style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; width: 250px;">
+            </div>
+            <button type="submit" class="btn btn-primary">Create Key</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Your Keys</h3>
+        ${keys.length === 0 ? '<p class="empty-state">No API keys yet.</p>' : `
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Key Prefix</th>
+                <th>Created</th>
+                <th>Last Used</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${keys.map(k => `
+                <tr>
+                  <td><strong>${escapeHtml(k.name)}</strong></td>
+                  <td><code>${escapeHtml(k.prefix)}...</code></td>
+                  <td class="text-muted">${formatDate(k.createdAt)}</td>
+                  <td class="text-muted">${k.lastUsedAt ? formatDate(k.lastUsedAt) : 'Never'}</td>
+                  <td><span class="badge ${k.status === 'active' ? 'badge-success' : 'badge-danger'}">${k.status}</span></td>
+                  <td>
+                    ${k.status === 'active' ? `
+                      <form method="post" action="/dashboard/api-keys/${k.id}/revoke" style="display: inline;">
+                        <button type="submit" class="btn btn-danger" onclick="return confirm('Revoke this key? Any scripts using it will stop working.')">Revoke</button>
+                      </form>
+                    ` : ''}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
+      </div>
+    `;
+
+    return c.html(layout('API Keys', content));
+  });
+
+  // Create API key (form POST, redirects back with the raw key shown once)
+  app.post('/dashboard/api-keys/create', async (c) => {
+    const auth = c.get('auth');
+    const body = await c.req.parseBody() as Record<string, string>;
+    const name = body.name;
+
+    if (!name) {
+      return c.redirect('/dashboard/api-keys');
+    }
+
+    // Call the JSON API internally
+    const { randomUUID, createHash } = await import('crypto');
+    const bcrypt = await import('bcryptjs');
+
+    const prefix = 'slap_k_';
+    const randomPart = Array.from({ length: 40 }, () =>
+      Math.floor(Math.random() * 16).toString(16)
+    ).join('');
+    const rawKey = prefix + randomPart;
+
+    const keyHash = await bcrypt.default.hash(rawKey, 10);
+    const indexKey = createHash('sha256').update(rawKey).digest('hex');
+    const keyId = randomUUID();
+    const displayPrefix = rawKey.slice(0, 16);
+
+    const apiKey = {
+      id: keyId,
+      name,
+      keyHash,
+      prefix: displayPrefix,
+      temporary: false,
+      createdAt: new Date().toISOString(),
+      expiresAt: null,
+      lastUsedAt: null,
+      status: 'active' as const,
+    };
+
+    await storage.saveApiKey(auth.uid, apiKey);
+    await storage.saveApiKeyIndex(indexKey, auth.uid, keyId);
+
+    return c.redirect(`/dashboard/api-keys?created=${encodeURIComponent(rawKey)}`);
+  });
+
+  // Revoke API key (form POST)
+  app.post('/dashboard/api-keys/:keyId/revoke', async (c) => {
+    const auth = c.get('auth');
+    const keyId = c.req.param('keyId');
+
+    const key = await storage.getApiKey(auth.uid, keyId);
+    if (key) {
+      await storage.deleteApiKey(auth.uid, keyId);
+    }
+
+    return c.redirect('/dashboard/api-keys?revoked=1');
+  });
+
   // Correction page
   app.get('/dashboard/captures/:captureId/correct', async (c) => {
     const captureId = c.req.param('captureId');
