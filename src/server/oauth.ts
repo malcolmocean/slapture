@@ -1,6 +1,7 @@
 // src/server/oauth.ts
 import type { Hono } from 'hono';
 import type { StorageInterface } from '../storage/interface.js';
+import { installDefaultRoutes } from '../integrations/default-routes.js';
 
 export interface OAuthConfig {
   intendClientId?: string;
@@ -176,8 +177,12 @@ export function buildOAuthRoutes(
         baseUrl: config.intendBaseUrl
       });
 
+      const defaultRoutesCreated = await installDefaultRoutes('intend', storage);
       console.log(`[OAuth] intend.do connected successfully for user: ${user}`);
-      return c.redirect('/dashboard/auth');
+      const redirectUrl = defaultRoutesCreated > 0
+        ? `/dashboard/auth?defaultRoutes=${defaultRoutesCreated}`
+        : '/dashboard/auth';
+      return c.redirect(redirectUrl);
     } catch (error) {
       console.error('[OAuth] Error during token exchange:', error);
       const detail = encodeURIComponent(error instanceof Error ? error.message : String(error));
@@ -311,8 +316,12 @@ export function buildOAuthRoutes(
         refreshToken: tokens.refresh_token,
       });
 
+      const defaultRoutesCreated = await installDefaultRoutes('sheets', storage);
       console.log(`[OAuth/Sheets] Google Sheets connected successfully for user: ${user}`);
-      return c.redirect('/dashboard/auth');
+      const redirectUrl = defaultRoutesCreated > 0
+        ? `/dashboard/auth?defaultRoutes=${defaultRoutesCreated}`
+        : '/dashboard/auth';
+      return c.redirect(redirectUrl);
     } catch (err) {
       console.error('[OAuth/Sheets] Error during token exchange:', err);
       const detail = encodeURIComponent(err instanceof Error ? err.message : String(err));
