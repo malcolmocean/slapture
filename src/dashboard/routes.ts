@@ -428,12 +428,62 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
 
       ${originHtml}
 
+      <details style="margin-top: 1.5rem;">
+        <summary style="cursor: pointer; font-weight: 600;">Edit Route</summary>
+        <div class="card" style="margin-top: 0.5rem;">
+          <form method="POST" action="/dashboard/routes/${route.id}/triggers">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Matchers (one regex per line)</label>
+            <textarea name="triggers" rows="4" style="width: 100%; font-family: monospace; font-size: 0.85rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">${route.triggers.map(t => escapeHtml(t.pattern)).join('\n')}</textarea>
+            <button type="submit" class="btn" style="margin-top: 0.5rem;">Save Matchers</button>
+          </form>
+          <hr style="margin: 1rem 0; border: none; border-top: 1px solid #eee;">
+          <form method="POST" action="/dashboard/routes/${route.id}/delete" onsubmit="return confirm('Delete route \\'${escapeHtml(route.name).replace(/'/g, "\\\\'")}\\' and all its matchers? This cannot be undone.')">
+            <button type="submit" class="btn btn-danger">Delete Route</button>
+          </form>
+        </div>
+      </details>
+
       <p style="margin-top: 1rem;">
         <a href="/dashboard/routes">← Back to routes</a>
       </p>
     `;
 
     return c.html(layout(route.name, content));
+  });
+
+  // Update route triggers
+  app.post('/dashboard/routes/:routeId/triggers', async (c) => {
+    const routeId = c.req.param('routeId');
+    const route = await storage.getRoute(routeId);
+    if (!route) {
+      return c.html(layout('Not Found', '<h1>Route not found</h1>'), 404);
+    }
+
+    const body = await c.req.parseBody();
+    const triggersText = String(body.triggers || '');
+    const patterns = triggersText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+    // Update triggers, preserving existing metadata where patterns match
+    route.triggers = patterns.map(pattern => {
+      const existing = route.triggers.find(t => t.pattern === pattern);
+      if (existing) return existing;
+      return { type: 'regex' as const, pattern, priority: 0, fireCount: 0 };
+    });
+
+    await storage.saveRoute(route);
+    return c.redirect(`/dashboard/routes/${routeId}`);
+  });
+
+  // Delete route
+  app.post('/dashboard/routes/:routeId/delete', async (c) => {
+    const routeId = c.req.param('routeId');
+    const route = await storage.getRoute(routeId);
+    if (!route) {
+      return c.html(layout('Not Found', '<h1>Route not found</h1>'), 404);
+    }
+
+    await storage.deleteRoute(routeId);
+    return c.redirect('/dashboard/routes');
   });
 
   // Auth status page

@@ -148,6 +148,13 @@ export class Storage implements StorageInterface {
     fs.writeFileSync(filePath, JSON.stringify(route, null, 2));
   }
 
+  async deleteRoute(id: string): Promise<void> {
+    const filePath = path.join(this.dataDir, 'routes', `${id}.json`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+
   async getRoute(id: string): Promise<Route | null> {
     const filePath = path.join(this.dataDir, 'routes', `${id}.json`);
     if (!fs.existsSync(filePath)) {

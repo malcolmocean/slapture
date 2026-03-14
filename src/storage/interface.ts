@@ -14,6 +14,7 @@ export interface StorageInterface {
   // Routes
   saveRoute(route: Route): Promise<void>;
   getRoute(id: string): Promise<Route | null>;
+  deleteRoute(id: string): Promise<void>;
   listRoutes(): Promise<Route[]>;
   getRouteByName(name: string): Promise<Route | null>;
 

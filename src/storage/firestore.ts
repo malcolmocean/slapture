@@ -80,6 +80,10 @@ export class FirestoreStorage implements StorageInterface {
     await this.db.collection('routes').doc(route.id).set(route);
   }
 
+  async deleteRoute(id: string): Promise<void> {
+    await this.db.collection('routes').doc(id).delete();
+  }
+
   async getRoute(id: string): Promise<Route | null> {
     const doc = await this.db.collection('routes').doc(id).get();
     if (!doc.exists) return null;
