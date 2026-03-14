@@ -1,7 +1,7 @@
 // src/storage/index.ts
 import fs from 'fs';
 import path from 'path';
-import { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, SheetsTokens, TriggerChangeReview, UserProfile, ApiKey } from '../types.js';
+import { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, SheetsTokens, RoamConfig, TriggerChangeReview, UserProfile, ApiKey } from '../types.js';
 import type { HygieneSignal } from '../hygiene/index.js';
 import type { StorageInterface } from './interface.js';
 
@@ -289,7 +289,7 @@ export class Storage implements StorageInterface {
     return path.join(this.ensureUserDir(username), 'config.json');
   }
 
-  private async getUserConfig(username: string): Promise<{ integrations?: { intend?: IntendTokens; sheets?: SheetsTokens } }> {
+  private async getUserConfig(username: string): Promise<{ integrations?: { intend?: IntendTokens; sheets?: SheetsTokens; roam?: RoamConfig } }> {
     const configPath = this.getUserConfigPath(username);
     if (!fs.existsSync(configPath)) {
       return {};
@@ -298,7 +298,7 @@ export class Storage implements StorageInterface {
     return JSON.parse(content);
   }
 
-  private async saveUserConfig(username: string, config: { integrations?: { intend?: IntendTokens; sheets?: SheetsTokens } }): Promise<void> {
+  private async saveUserConfig(username: string, config: { integrations?: { intend?: IntendTokens; sheets?: SheetsTokens; roam?: RoamConfig } }): Promise<void> {
     const configPath = this.getUserConfigPath(username);
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
   }
@@ -340,6 +340,26 @@ export class Storage implements StorageInterface {
     const config = await this.getUserConfig(username);
     if (config.integrations) {
       delete config.integrations.sheets;
+      await this.saveUserConfig(username, config);
+    }
+  }
+
+  async getRoamConfig(username: string): Promise<RoamConfig | null> {
+    const config = await this.getUserConfig(username);
+    return config.integrations?.roam || null;
+  }
+
+  async saveRoamConfig(username: string, roamConfig: RoamConfig): Promise<void> {
+    const config = await this.getUserConfig(username);
+    config.integrations = config.integrations || {};
+    config.integrations.roam = roamConfig;
+    await this.saveUserConfig(username, config);
+  }
+
+  async clearRoamConfig(username: string): Promise<void> {
+    const config = await this.getUserConfig(username);
+    if (config.integrations) {
+      delete config.integrations.roam;
       await this.saveUserConfig(username, config);
     }
   }

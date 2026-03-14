@@ -1,7 +1,7 @@
 // src/storage/firestore.ts
 import { Firestore } from '@google-cloud/firestore';
 import type { StorageInterface } from './interface.js';
-import type { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, SheetsTokens, TriggerChangeReview, UserProfile, ApiKey } from '../types.js';
+import type { Capture, Route, Config, ExecutionStep, EvolverTestCase, IntendTokens, SheetsTokens, RoamConfig, TriggerChangeReview, UserProfile, ApiKey } from '../types.js';
 import type { HygieneSignal } from '../hygiene/index.js';
 
 export class FirestoreStorage implements StorageInterface {
@@ -209,6 +209,27 @@ export class FirestoreStorage implements StorageInterface {
       delete data.integrations.sheets;
       await this.db.collection('users').doc(username).set(data);
     }
+  }
+
+  async getRoamConfig(username: string): Promise<RoamConfig | null> {
+    const doc = await this.db.collection('users').doc(username).get();
+    if (!doc.exists) return null;
+    const data = doc.data();
+    return data?.integrations?.roam || null;
+  }
+
+  async saveRoamConfig(username: string, config: RoamConfig): Promise<void> {
+    await this.db.collection('users').doc(username).set(
+      { integrations: { roam: config } },
+      { merge: true },
+    );
+  }
+
+  async clearRoamConfig(username: string): Promise<void> {
+    const { FieldValue } = await import('@google-cloud/firestore');
+    await this.db.collection('users').doc(username).update({
+      'integrations.roam': FieldValue.delete(),
+    });
   }
 
   // Integration notes
