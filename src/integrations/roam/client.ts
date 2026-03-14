@@ -44,7 +44,7 @@ export class RoamClient {
     const result = await pull(
       this.graph,
       '[*]',
-      `[:node/title "${title}"]`,
+      `[:node/title "${title.replace(/"/g, '\\"')}"]`,
     );
     return result as Record<string, unknown> | null;
   }
@@ -56,7 +56,7 @@ export class RoamClient {
     const result = await pull(
       this.graph,
       '[:block/children {:block/children [:block/string :block/uid :block/order]}]',
-      `[:block/uid "${uid}"]`,
+      `[:block/uid "${uid.replace(/"/g, '\\"')}"]`,
     );
     const data = result as Record<string, unknown> | null;
     return (data?.[':block/children'] as Record<string, unknown>[]) || [];
@@ -71,7 +71,11 @@ export class RoamClient {
     if (!page) return null;
     const children = page[':block/children'] as Record<string, unknown>[] | undefined;
     if (!children) return null;
-    return children.find((child) => child[':block/string'] === searchText) || null;
+    const searchLower = searchText.toLowerCase();
+    return children.find((child) => {
+      const blockStr = child[':block/string'] as string | undefined;
+      return blockStr?.toLowerCase().includes(searchLower);
+    }) || null;
   }
 
   /**
