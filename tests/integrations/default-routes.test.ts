@@ -240,3 +240,42 @@ describe('restoreDefaultRoute', () => {
     await expect(restoreDefaultRoute('intend', 'nope', storage as any)).rejects.toThrow();
   });
 });
+
+describe('intend trigger regex', () => {
+  const pattern = INTEND_TEMPLATE.triggers[0].pattern;
+  const regex = new RegExp(pattern, 'i');
+
+  const shouldMatch = [
+    '1) do laundry',
+    '&) random task',
+    'FI) run 5k',
+    '1,FI) run then rest',
+    ') just a task',
+    '*1) starred task',
+    '// this is a comment',
+    '2,3) multi-goal task',
+  ];
+
+  const shouldNotMatch = [
+    'just some text',
+    'hey siri set a timer',
+    'weight 88.2kg',
+    '',
+    ')',
+    ') ',
+    '//',
+    '// ',
+  ];
+
+  for (const input of shouldMatch) {
+    it(`should match: "${input}"`, () => {
+      expect(regex.test(input)).toBe(true);
+    });
+  }
+
+  for (const input of shouldNotMatch) {
+    it(`should NOT match: "${input}"`, () => {
+      expect(regex.test(input)).toBe(false);
+    });
+  }
+});
