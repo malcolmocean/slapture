@@ -437,6 +437,13 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
             <button type="submit" class="btn" style="margin-top: 0.5rem;">Save Matchers</button>
           </form>
           <hr style="margin: 1rem 0; border: none; border-top: 1px solid #eee;">
+          <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Destination Config</label>
+          <pre style="background: #f8f9fa; padding: 0.75rem; border-radius: 4px; font-size: 0.8rem; overflow-x: auto; border: 1px solid #e0e0e0;">${escapeHtml(JSON.stringify(route.destinationConfig, null, 2))}</pre>
+          ${route.transformScript ? `
+            <label style="display: block; margin-top: 0.75rem; margin-bottom: 0.5rem; font-weight: 500;">Transform Script</label>
+            <pre style="background: #f8f9fa; padding: 0.75rem; border-radius: 4px; font-size: 0.8rem; overflow-x: auto; border: 1px solid #e0e0e0;">${escapeHtml(route.transformScript)}</pre>
+          ` : ''}
+          <hr style="margin: 1rem 0; border: none; border-top: 1px solid #eee;">
           <form method="POST" action="/dashboard/routes/${route.id}/delete" onsubmit="return confirm('Delete route \\'${escapeHtml(route.name).replace(/'/g, "\\\\'")}\\' and all its matchers? This cannot be undone.')">
             <button type="submit" class="btn btn-danger">Delete Route</button>
           </form>
