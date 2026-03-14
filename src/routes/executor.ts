@@ -4,6 +4,7 @@ import type { StorageInterface } from '../storage/interface.js';
 import { IntendExecutor } from './intend-executor.js';
 import { NotesExecutor } from './notes-executor.js';
 import { SheetsExecutor } from './sheets-executor.js';
+import { RoamExecutor } from './roam-executor.js';
 import { FileSheetsAuthProvider } from '../integrations/sheets/auth.js';
 import type { SheetsAuthProvider } from '../integrations/sheets/types.js';
 import fs from 'fs';
@@ -22,6 +23,7 @@ export class RouteExecutor {
   private intendExecutor: IntendExecutor | null;
   private notesExecutor: NotesExecutor | null;
   private sheetsExecutor: SheetsExecutor | null;
+  private roamExecutor: RoamExecutor | null;
 
   constructor(filestoreRoot: string = './filestore', storage?: StorageInterface, sheetsAuthProvider?: SheetsAuthProvider) {
     this.filestoreRoot = filestoreRoot;
@@ -30,6 +32,7 @@ export class RouteExecutor {
     this.notesExecutor = storage ? new NotesExecutor(storage) : null;
     const authProvider = sheetsAuthProvider ?? new FileSheetsAuthProvider();
     this.sheetsExecutor = new SheetsExecutor(authProvider);
+    this.roamExecutor = storage ? new RoamExecutor(storage) : null;
   }
 
   async execute(
@@ -88,6 +91,23 @@ export class RouteExecutor {
         success: sheetsResult.status === 'success',
         status: sheetsResult.status,
         error: sheetsResult.error,
+      };
+    }
+
+    // Handle roam destination type
+    if (route.destinationType === 'roam') {
+      if (!this.roamExecutor || !capture) {
+        return {
+          success: false,
+          status: 'failed',
+          error: 'RoamExecutor not configured or capture not provided',
+        };
+      }
+      const roamResult = await this.roamExecutor.execute(route, capture);
+      return {
+        success: roamResult.status === 'success',
+        status: roamResult.status,
+        error: roamResult.error,
       };
     }
 
