@@ -678,40 +678,39 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
         </form>
       </div>
 
-      <div class="card">
+      <div class="card" id="keys-card">
         <h3>Your Keys</h3>
-        ${keys.length === 0 ? '<p class="empty-state">No API keys yet.</p>' : `
-          <table>
-            <thead>
+        ${keys.length === 0 ? '<p class="empty-state" id="no-keys-msg">No API keys yet.</p>' : ''}
+        <table id="keys-table" ${keys.length === 0 ? 'style="display: none;"' : ''}>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Key Prefix</th>
+              <th>Created</th>
+              <th>Last Used</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="keys-tbody">
+            ${keys.map(k => `
               <tr>
-                <th>Name</th>
-                <th>Key Prefix</th>
-                <th>Created</th>
-                <th>Last Used</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <td><strong>${escapeHtml(k.name)}</strong></td>
+                <td><code>${escapeHtml(k.prefix)}...</code></td>
+                <td class="text-muted">${formatDate(k.createdAt)}</td>
+                <td class="text-muted">${k.lastUsedAt ? formatDate(k.lastUsedAt) : 'Never'}</td>
+                <td><span class="badge ${k.status === 'active' ? 'badge-success' : 'badge-danger'}">${k.status}</span></td>
+                <td>
+                  ${k.status === 'active' ? `
+                    <form method="post" action="/dashboard/api-keys/${k.id}/revoke" style="display: inline;">
+                      <button type="submit" class="btn btn-danger" onclick="return confirm('Revoke this key? Any scripts using it will stop working.')">Revoke</button>
+                    </form>
+                  ` : ''}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              ${keys.map(k => `
-                <tr>
-                  <td><strong>${escapeHtml(k.name)}</strong></td>
-                  <td><code>${escapeHtml(k.prefix)}...</code></td>
-                  <td class="text-muted">${formatDate(k.createdAt)}</td>
-                  <td class="text-muted">${k.lastUsedAt ? formatDate(k.lastUsedAt) : 'Never'}</td>
-                  <td><span class="badge ${k.status === 'active' ? 'badge-success' : 'badge-danger'}">${k.status}</span></td>
-                  <td>
-                    ${k.status === 'active' ? `
-                      <form method="post" action="/dashboard/api-keys/${k.id}/revoke" style="display: inline;">
-                        <button type="submit" class="btn btn-danger" onclick="return confirm('Revoke this key? Any scripts using it will stop working.')">Revoke</button>
-                      </form>
-                    ` : ''}
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        `}
+            `).join('')}
+          </tbody>
+        </table>
       </div>
 
       <script>
@@ -752,6 +751,23 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
               + '</div>'
               + '<p style="margin: 0.5rem 0 0; font-size: 0.75rem; color: #155724;">Click any block to copy.</p>';
             banner.scrollIntoView({ behavior: 'smooth' });
+
+            // Add to the keys table
+            var noMsg = document.getElementById('no-keys-msg');
+            if (noMsg) noMsg.remove();
+            var table = document.getElementById('keys-table');
+            table.style.display = '';
+            var tbody = document.getElementById('keys-tbody');
+            var tr = document.createElement('tr');
+            var now = new Date();
+            var dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            tr.innerHTML = '<td><strong>' + name.replace(/</g, '&lt;') + '</strong></td>'
+              + '<td><code>' + data.prefix + '...</code></td>'
+              + '<td class="text-muted">' + dateStr + '</td>'
+              + '<td class="text-muted">Never</td>'
+              + '<td><span class="badge badge-success">active</span></td>'
+              + '<td><form method="post" action="/dashboard/api-keys/' + data.id + '/revoke" style="display: inline;"><button type="submit" class="btn btn-danger" onclick="return confirm(\\u0027Revoke this key? Any scripts using it will stop working.\\u0027)">Revoke</button></form></td>';
+            tbody.prepend(tr);
 
             nameInput.value = '';
           } catch (err) {
