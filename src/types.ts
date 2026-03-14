@@ -147,8 +147,15 @@ export interface Route {
   transformScript: string | null;
 
   createdAt: string;
-  createdBy: 'user' | 'mastermind';
+  createdBy: 'user' | 'mastermind' | 'integration';
   lastUsed: string | null;
+
+  /** Tags routes created from integration defaults for state tracking */
+  defaultSource?: {
+    integrationId: string;
+    defaultKey: string;
+    templateHash: string;
+  };
 
   versions?: RouteVersion[]; // Version history, newest first
 
@@ -286,11 +293,22 @@ export interface RoamConfig {
   graphs: RoamGraphConfig[];
 }
 
+export interface DefaultRouteTemplate {
+  key: string;
+  name: string;
+  description: string;
+  triggers: Array<{ pattern: string; priority: number }>;
+  destinationType: Route['destinationType'];
+  destinationConfig: Route['destinationConfig'];
+  transformScript: string | null;
+}
+
 export interface Integration {
   id: string;                    // 'intend', 'fs', 'notes'
   name: string;                  // 'intend.do', 'Local Files', 'Notes'
   purpose: string;               // "Track daily intentions, todos, goals"
   authType: 'oauth' | 'api-key' | 'none';
+  defaultRoutes?: DefaultRouteTemplate[];  // NEW
 }
 
 export interface IntegrationConfig {
