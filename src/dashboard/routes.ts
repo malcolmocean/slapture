@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import type { StorageInterface } from '../storage/interface.js';
-import { layout, escapeHtml, formatDate, statusBadge, verificationBadge, renderPipeline } from './templates.js';
+import { layout, escapeHtml, formatDate, statusBadge, verificationBadge, renderPipeline, renderPipelineHero, relativeTime } from './templates.js';
 import { getIntegration, getIntegrationsWithStatus } from '../integrations/registry.js';
 
 export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void {
@@ -64,6 +64,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
   app.get('/dashboard/captures', async (c) => {
     const status = c.req.query('status');
     const search = c.req.query('search');
+    const routeFilter = c.req.query('route');
     const pageStr = c.req.query('page');
     const page = parseInt(pageStr || '1', 10);
     const perPage = 25;
@@ -84,6 +85,11 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       );
     }
 
+    // Filter by route
+    if (routeFilter) {
+      captures = captures.filter(c => c.routeFinal === routeFilter);
+    }
+
     // Sort by timestamp descending
     captures.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
@@ -97,12 +103,15 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       <h1>Captures</h1>
 
       <form class="filter-bar" method="get" action="/dashboard/captures">
+        ${routeFilter ? `<input type="hidden" name="route" value="${escapeHtml(routeFilter)}">` : ''}
         <select name="status" onchange="this.form.submit()">
           ${statuses.map(s => `<option value="${s}" ${status === s ? 'selected' : ''}>${s === 'all' ? 'All Statuses' : s}</option>`).join('')}
         </select>
         <input type="text" name="search" placeholder="Search..." value="${escapeHtml(search || '')}">
         <button type="submit" class="btn btn-secondary">Filter</button>
       </form>
+
+      ${routeFilter ? `<p class="text-muted">Filtered by route: <code>${escapeHtml(routeFilter)}</code> · <a href="/dashboard/captures">Clear filter</a></p>` : ''}
 
       <div class="card">
         ${paginatedCaptures.length === 0 ? '<p class="empty-state">No captures match your filters</p>' : `
@@ -135,9 +144,9 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
 
           ${totalPages > 1 ? `
             <div style="margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: center;">
-              ${page > 1 ? `<a href="/dashboard/captures?status=${status || 'all'}&search=${encodeURIComponent(search || '')}&page=${page - 1}" class="btn btn-secondary">← Prev</a>` : ''}
+              ${page > 1 ? `<a href="/dashboard/captures?status=${status || 'all'}&search=${encodeURIComponent(search || '')}${routeFilter ? `&route=${encodeURIComponent(routeFilter)}` : ''}&page=${page - 1}" class="btn btn-secondary">← Prev</a>` : ''}
               <span style="padding: 0.5rem;">Page ${page} of ${totalPages}</span>
-              ${page < totalPages ? `<a href="/dashboard/captures?status=${status || 'all'}&search=${encodeURIComponent(search || '')}&page=${page + 1}" class="btn btn-secondary">Next →</a>` : ''}
+              ${page < totalPages ? `<a href="/dashboard/captures?status=${status || 'all'}&search=${encodeURIComponent(search || '')}${routeFilter ? `&route=${encodeURIComponent(routeFilter)}` : ''}&page=${page + 1}" class="btn btn-secondary">Next →</a>` : ''}
             </div>
           ` : ''}
         `}
@@ -274,101 +283,150 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
   // Route detail
   app.get('/dashboard/routes/:routeId', async (c) => {
     const routeId = c.req.param('routeId');
+    const auth = c.get('auth');
 
     const route = await storage.getRoute(routeId);
     if (!route) {
       return c.html(layout('Not Found', '<h1>Route not found</h1>'), 404);
     }
 
-    const allCaptures = await storage.listAllCaptures(c.get('auth')?.uid);
-    const routeCaptures = allCaptures.filter(c => c.routeFinal === route.id);
+    const [allCaptures, integrations] = await Promise.all([
+      storage.listAllCaptures(auth.uid),
+      getIntegrationsWithStatus(storage, auth.uid),
+    ]);
+    const routeCaptures = allCaptures.filter(cap => cap.routeFinal === route.id);
+
+    // Sort captures by timestamp descending (newest first) for the table
+    const sortedCaptures = [...routeCaptures].sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    // Integration status
+    const integration = integrations.find(i => i.id === route.destinationType);
+    const integrationStatus = integration?.status || 'never';
+
+    // Success rate
+    const successCaptures = routeCaptures.filter(cap => cap.executionResult === 'success').length;
+    const successRate = routeCaptures.length > 0
+      ? Math.round(successCaptures / routeCaptures.length * 100)
+      : null;
+
+    // Last used relative
+    const lastUsedStr = route.lastUsed ? relativeTime(route.lastUsed) : 'never';
+
+    // Created by badge
+    const createdByBadge = route.createdBy === 'mastermind'
+      ? '<span class="meta-badge" style="background: #ede9fe; color: #5b21b6;">mastermind</span>'
+      : '<span class="meta-badge">user</span>';
+
+    // Version history changes column helper
+    const versionChanges = (reason: string): string => {
+      const lower = reason.toLowerCase();
+      if (lower.includes('creat')) return 'created';
+      const parts: string[] = [];
+      if (lower.includes('trigger')) parts.push('+1 trigger');
+      if (lower.includes('transform')) parts.push('~transform');
+      if (lower.includes('evolv')) parts.push('evolved');
+      return parts.length > 0 ? parts.join(', ') : escapeHtml(reason.slice(0, 30));
+    };
+
+    // Origin section (only for mastermind-created routes)
+    let originHtml = '';
+    if (route.createdBy === 'mastermind' && routeCaptures.length > 0) {
+      const earliestCapture = [...routeCaptures].sort((a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      )[0];
+      const mastermindStep = earliestCapture.executionTrace.find(s => s.step === 'mastermind');
+      const mastermindReason = mastermindStep
+        ? String((mastermindStep.output as Record<string, unknown>)?.reason || '')
+        : '';
+
+      originHtml = `
+        <details>
+          <summary style="cursor: pointer; font-weight: 600;">Origin</summary>
+          <div class="card" style="margin-top: 0.5rem;">
+            <p><strong>First capture:</strong> <a href="/dashboard/captures/${earliestCapture.id}">${escapeHtml(earliestCapture.raw)}</a></p>
+            ${mastermindReason ? `<p style="margin-top: 0.5rem;"><strong>Mastermind reasoning:</strong> ${escapeHtml(mastermindReason)}</p>` : ''}
+            <p style="margin-top: 0.5rem;" class="text-muted">Created ${formatDate(route.createdAt)}</p>
+          </div>
+        </details>
+      `;
+    }
 
     const content = `
       <h1>${escapeHtml(route.name)}</h1>
 
-      <div class="card">
-        <h3>Details</h3>
-        <table>
-          <tr><td><strong>ID</strong></td><td><code>${route.id}</code></td></tr>
-          <tr><td><strong>Description</strong></td><td>${escapeHtml(route.description)}</td></tr>
-          <tr><td><strong>Destination Type</strong></td><td><span class="badge badge-info">${route.destinationType}</span></td></tr>
-          <tr><td><strong>Created</strong></td><td>${formatDate(route.createdAt)}</td></tr>
-          <tr><td><strong>Created By</strong></td><td>${route.createdBy}</td></tr>
-          <tr><td><strong>Last Used</strong></td><td>${route.lastUsed ? formatDate(route.lastUsed) : 'Never'}</td></tr>
-        </table>
+      ${renderPipelineHero(route, integrationStatus)}
+
+      <div class="meta-line">
+        Created by ${createdByBadge} · ${routeCaptures.length} captures · ${successRate !== null ? `${successRate}% success` : '—'} · Last used ${lastUsedStr}
       </div>
 
-      <div class="card">
-        <h3>Triggers</h3>
-        ${route.triggers.length === 0 ? '<p class="text-muted">No triggers configured</p>' : `
-          <table>
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Pattern</th>
-                <th>Priority</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${route.triggers.map(t => `
+      <details open>
+        <summary style="cursor: pointer; font-weight: 600;">Recent Captures (${routeCaptures.length})</summary>
+        <div class="card" style="margin-top: 0.5rem;">
+          ${sortedCaptures.length === 0 ? '<p class="empty-state">No captures for this route</p>' : `
+            <table>
+              <thead>
                 <tr>
-                  <td><span class="badge badge-secondary">${t.type}</span></td>
-                  <td><code>${escapeHtml(t.pattern)}</code></td>
-                  <td>${t.priority}</td>
+                  <th>Time</th>
+                  <th>Input → Output</th>
+                  <th>Matched</th>
+                  <th>Status</th>
                 </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        `}
-      </div>
-
-      <div class="card">
-        <h3>Recent Captures (${routeCaptures.length} total)</h3>
-        ${routeCaptures.length === 0 ? '<p class="text-muted">No captures for this route</p>' : `
-          <table>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Input</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${routeCaptures.slice(0, 10).map(c => `
-                <tr>
-                  <td>${formatDate(c.timestamp)}</td>
-                  <td class="text-truncate"><a href="/dashboard/captures/${c.id}">${escapeHtml(c.raw)}</a></td>
-                  <td>${statusBadge(c.executionResult)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        `}
-      </div>
+              </thead>
+              <tbody>
+                ${sortedCaptures.slice(0, 10).map(cap => `
+                  <tr>
+                    <td style="white-space: nowrap; color: #999;">${relativeTime(cap.timestamp)}</td>
+                    <td>
+                      <a href="/dashboard/captures/${cap.id}">${escapeHtml(cap.raw)}</a>
+                      ${cap.verificationState === 'human_verified' ? '<span class="verified-badge">verified</span>' : ''}
+                      ${cap.transformedPayload ? `<br><span class="transform-arrow">↳</span> <span class="transform-output">"${escapeHtml(cap.transformedPayload)}"</span>` :
+                        (route.transformScript ? `<br><span class="transform-arrow">↳</span> <span class="transform-output">${escapeHtml(cap.raw)}</span> <span style="font-size: 0.65rem; color: #999;">(unchanged)</span>` : '')}
+                    </td>
+                    <td>${cap.matchedTrigger ? `<code style="font-size: 0.75rem; background: #e8f4fd; padding: 0.1rem 0.3rem; border-radius: 3px;">${escapeHtml(cap.matchedTrigger)}</code>` : '—'}</td>
+                    <td>${statusBadge(cap.executionResult)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            <div style="text-align: center; padding: 0.5rem; font-size: 0.8rem;">
+              <a href="/dashboard/captures?route=${route.id}">View all ${routeCaptures.length} captures →</a>
+            </div>
+          `}
+        </div>
+      </details>
 
       ${route.versions && route.versions.length > 0 ? `
-        <div class="card">
-          <h3>Version History</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Version</th>
-                <th>Time</th>
-                <th>Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${route.versions.map(v => `
+        <details>
+          <summary style="cursor: pointer; font-weight: 600;">Version History (${route.versions.length})</summary>
+          <div class="card" style="margin-top: 0.5rem;">
+            <table>
+              <thead>
                 <tr>
-                  <td>v${v.version}</td>
-                  <td>${formatDate(v.timestamp)}</td>
-                  <td>${escapeHtml(v.reason)}</td>
+                  <th>Version</th>
+                  <th>Time</th>
+                  <th>Reason</th>
+                  <th>Changes</th>
                 </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                ${route.versions.map(v => `
+                  <tr>
+                    <td>v${v.version}</td>
+                    <td>${formatDate(v.timestamp)}</td>
+                    <td>${escapeHtml(v.reason)}</td>
+                    <td><code style="font-size: 0.75rem;">${versionChanges(v.reason)}</code></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </details>
       ` : ''}
+
+      ${originHtml}
 
       <p style="margin-top: 1rem;">
         <a href="/dashboard/routes">← Back to routes</a>

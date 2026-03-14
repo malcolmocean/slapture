@@ -113,7 +113,7 @@ test.describe('Route Management', () => {
     await expect(page.locator('text=dump')).toBeVisible();
   });
 
-  test('shows route detail with triggers', async ({ page }) => {
+  test('shows route detail with pipeline hero', async ({ page }) => {
     // Get the dump route ID
     const routes = await page.request.get(`/routes`);
     const routeList = await routes.json();
@@ -122,7 +122,10 @@ test.describe('Route Management', () => {
     await page.goto(`/dashboard/routes/${dumpRoute.id}`);
 
     await expect(page.locator('h1')).toContainText('dump');
-    await expect(page.getByRole('heading', { name: 'Triggers' })).toBeVisible();
+    await expect(page.locator('.box-matchers')).toBeVisible();
+    await expect(page.locator('.box-destination')).toBeVisible();
+    await expect(page.locator('.pipeline-arrow')).toBeVisible();
+    await expect(page.locator('.meta-line')).toBeVisible();
   });
 });
 
@@ -168,6 +171,40 @@ test.describe('Correction Flow', () => {
 
     // Should show correction form
     await expect(page.locator('text=Select correct route')).toBeVisible();
+  });
+});
+
+test.describe('Route Detail (redesigned)', () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAsTestUser(page);
+  });
+
+  test('shows pipeline hero with matchers and destination', async ({ page }) => {
+    await page.goto('/dashboard/routes');
+    const firstRoute = page.locator('table tbody tr td a').first();
+    if (await firstRoute.count() === 0) {
+      test.skip(true, 'No routes exist');
+      return;
+    }
+    await firstRoute.click();
+
+    await expect(page.locator('.box-matchers')).toBeVisible();
+    await expect(page.locator('.box-destination')).toBeVisible();
+    await expect(page.locator('.pipeline-arrow')).toBeVisible();
+    await expect(page.locator('.meta-line')).toBeVisible();
+  });
+
+  test('recent captures accordion is open by default', async ({ page }) => {
+    await page.goto('/dashboard/routes');
+    const firstRoute = page.locator('table tbody tr td a').first();
+    if (await firstRoute.count() === 0) {
+      test.skip(true, 'No routes exist');
+      return;
+    }
+    await firstRoute.click();
+
+    const recentDetails = page.locator('details').first();
+    await expect(recentDetails).toHaveAttribute('open', '');
   });
 });
 
