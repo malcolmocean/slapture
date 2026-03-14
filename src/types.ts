@@ -92,6 +92,15 @@ export interface SheetsDestinationConfig {
 }
 
 /**
+ * Roam destination config - full type in integrations/roam/types.ts
+ * This is a forward declaration to avoid circular imports.
+ */
+export interface RoamDestinationConfig {
+  graphName: string;
+  operation: unknown;  // Full type: RoamOperation from integrations/roam/types.ts
+}
+
+/**
  * Configuration for LLM validation at the route level.
  */
 export interface RouteValidation {
@@ -121,12 +130,13 @@ export interface Route {
   /** Recent successful items (serves as positive examples for validation) */
   recentItems: CaptureRef[];
 
-  destinationType: 'fs' | 'intend' | 'notes' | 'sheets';
+  destinationType: 'fs' | 'intend' | 'notes' | 'sheets' | 'roam';
   destinationConfig:
     | { filePath: string }           // fs
     | { baseUrl: string }            // intend
     | NotesDestinationConfig         // notes
-    | SheetsDestinationConfig;       // sheets (see sheets-executor.ts for type)
+    | SheetsDestinationConfig        // sheets (see sheets-executor.ts for type)
+    | RoamDestinationConfig;         // roam (see integrations/roam/types.ts)
   transformScript: string | null;
 
   createdAt: string;
@@ -259,6 +269,16 @@ export interface SheetsTokens {
   refreshToken: string;
 }
 
+export interface RoamGraphConfig {
+  graphName: string;
+  token: string;
+  addedAt: string;
+}
+
+export interface RoamConfig {
+  graphs: RoamGraphConfig[];
+}
+
 export interface Integration {
   id: string;                    // 'intend', 'fs', 'notes'
   name: string;                  // 'intend.do', 'Local Files', 'Notes'
@@ -269,6 +289,7 @@ export interface Integration {
 export interface IntegrationConfig {
   intend?: IntendTokens;
   sheets?: SheetsTokens;
+  roam?: RoamConfig;
 }
 
 export interface Config {

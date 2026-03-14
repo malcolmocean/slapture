@@ -17,6 +17,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.19.9
         version: 1.19.9(hono@4.12.1)
+      '@roam-research/roam-api-sdk':
+        specifier: ^0.10.0
+        version: 0.10.0
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -357,6 +360,9 @@ packages:
 
   '@protobufjs/utf8@1.1.0':
     resolution: {integrity: sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw==}
+
+  '@roam-research/roam-api-sdk@0.10.0':
+    resolution: {integrity: sha512-7LdbYF7s3XLdlhTu0DgxZCDMyZOPR7KscsXwUfW8gMIg2uVeuSkKKlCfNwCj0edhs13wGfTovxF99ZbwVS4D5A==}
 
   '@rollup/rollup-android-arm-eabi@4.55.3':
     resolution: {integrity: sha512-qyX8+93kK/7R5BEXPC2PjUt0+fS/VO2BVHjEHyIEWiYn88rcRBHmdLgoJjktBltgAf+NY7RfCGB1SoyKS/p9kg==}
@@ -1686,6 +1692,8 @@ snapshots:
   '@protobufjs/pool@1.1.0': {}
 
   '@protobufjs/utf8@1.1.0': {}
+
+  '@roam-research/roam-api-sdk@0.10.0': {}
 
   '@rollup/rollup-android-arm-eabi@4.55.3':
     optional: true
