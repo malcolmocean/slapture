@@ -16,34 +16,39 @@ test.describe('Roam Integration', () => {
   });
 
   test('can connect a Roam graph, see it listed, and disconnect it', async ({ page }) => {
+    // Navigate to auth page and click Settings for Roam
     await page.goto('/dashboard/auth');
+    await page.locator('a[href="/dashboard/roam"]').click();
+    await page.waitForURL('**/dashboard/roam**');
 
-    // Verify the "Roam Research Graphs" section exists
-    await expect(page.locator('text=Roam Research Graphs')).toBeVisible();
+    // Should see the Roam settings page
+    await expect(page.locator('text=Roam Research Settings')).toBeVisible();
 
     // Fill the "Add Graph" form
     await page.locator('input[name="graphName"]').fill(ROAM_TEST_GRAPH_NAME);
     await page.locator('input[name="token"]').fill(ROAM_TEST_GRAPH_TOKEN);
-    await page.locator('form[action="/connect/roam"] button[type="submit"]').click();
 
-    // Should redirect back to /dashboard/auth after connecting
-    await page.waitForURL('**/dashboard/auth**', { timeout: 30_000 });
+    // Click connect — button should show "Connecting..."
+    const connectBtn = page.locator('#roam-connect-btn');
+    await connectBtn.click();
+
+    // Should redirect back to /dashboard/roam after connecting
+    await page.waitForURL('**/dashboard/roam**', { timeout: 30_000 });
 
     // The graph name should now appear in the connected list
     await expect(page.locator(`text=${ROAM_TEST_GRAPH_NAME}`)).toBeVisible();
 
     // The "Remove" button should be visible for this graph
-    const removeButton = page.locator(`form[action*="/disconnect/roam/${ROAM_TEST_GRAPH_NAME}"] button`);
+    const removeButton = page.locator(`form[action*="/disconnect/roam/"] button`);
     await expect(removeButton).toBeVisible();
 
     // Disconnect the graph
     await removeButton.click();
 
-    // Should redirect back to auth page
-    await page.waitForURL('**/dashboard/auth**', { timeout: 10_000 });
+    // Should redirect back to roam settings
+    await page.waitForURL('**/dashboard/roam**', { timeout: 10_000 });
 
-    // The graph should no longer appear (or show "No Roam graphs connected")
-    // Wait a moment for the page to settle
-    await expect(page.locator('text=No Roam graphs connected')).toBeVisible({ timeout: 5_000 });
+    // The graph should no longer appear
+    await expect(page.locator('text=No graphs connected yet')).toBeVisible({ timeout: 5_000 });
   });
 });

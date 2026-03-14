@@ -383,7 +383,6 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     const auth = c.get('auth');
     const integrations = await getIntegrationsWithStatus(storage, auth.uid);
     const blocked = await storage.listCapturesNeedingAuth(auth.uid);
-    const roamConfig = await storage.getRoamConfig(auth.uid);
 
     const statusBadgeMap: Record<string, string> = {
       connected: 'badge-success',
@@ -423,51 +422,13 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
                       <a href="/connect/${i.id}" class="btn btn-primary">Connect</a>
                     `}
                   ` : i.id === 'roam' ? `
-                    ${i.status === 'connected' ? '<span class="badge badge-success">Connected</span>' : ''}
+                    <a href="/dashboard/roam" class="btn btn-secondary">Settings</a>
                   ` : '<span class="text-muted">No auth needed</span>'}
                 </td>
               </tr>
             `).join('')}
           </tbody>
         </table>
-      </div>
-
-      <div class="card">
-        <h3>Roam Research Graphs</h3>
-        ${roamConfig?.graphs?.length ? `
-          <table>
-            <thead>
-              <tr><th>Graph</th><th>Connected</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              ${roamConfig.graphs.map(g => `
-                <tr>
-                  <td><strong>${escapeHtml(g.graphName)}</strong></td>
-                  <td class="text-muted">${formatDate(g.addedAt)}</td>
-                  <td>
-                    <form method="post" action="/disconnect/roam/${escapeHtml(g.graphName)}?redirect=/dashboard/auth" style="display: inline;">
-                      <button type="submit" class="btn btn-danger">Remove</button>
-                    </form>
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        ` : '<p class="text-muted">No Roam graphs connected</p>'}
-        <h4 style="margin-top: 1rem;">Add Graph</h4>
-        <form method="post" action="/connect/roam">
-          <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
-            <div>
-              <label>Graph Name</label>
-              <input type="text" name="graphName" placeholder="my-graph" required style="width: 200px;">
-            </div>
-            <div>
-              <label>API Token</label>
-              <input type="password" name="token" placeholder="roam-graph-token-..." required style="width: 300px;">
-            </div>
-            <button type="submit" class="btn btn-primary">Connect</button>
-          </div>
-        </form>
       </div>
 
       <div class="card">
@@ -502,6 +463,83 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     `;
 
     return c.html(layout('Auth Status', content));
+  });
+
+  // Roam settings page
+  app.get('/dashboard/roam', async (c) => {
+    const auth = c.get('auth');
+    const roamConfig = await storage.getRoamConfig(auth.uid);
+    const error = c.req.query('error');
+
+    const errorBanner = error ? `
+      <div class="card" style="background: #fee; border-left: 4px solid #c00; margin-bottom: 1rem;">
+        <p style="margin: 0; color: #c00;">
+          ${error === 'connection_failed' ? 'Failed to connect — check your graph name and token.' :
+            error === 'missing_fields' ? 'Please fill in both graph name and token.' :
+            'An error occurred.'}
+        </p>
+      </div>
+    ` : '';
+
+    const content = `
+      <h1>Roam Research Settings</h1>
+      <p><a href="/dashboard/auth">&larr; Back to Auth Status</a></p>
+
+      ${errorBanner}
+
+      <div class="card">
+        <h3>Connected Graphs</h3>
+        ${roamConfig?.graphs?.length ? `
+          <table>
+            <thead>
+              <tr><th>Graph</th><th>Connected</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              ${roamConfig.graphs.map(g => `
+                <tr>
+                  <td><strong>${escapeHtml(g.graphName)}</strong></td>
+                  <td class="text-muted">${formatDate(g.addedAt)}</td>
+                  <td>
+                    <form method="post" action="/disconnect/roam/${encodeURIComponent(g.graphName)}?redirect=/dashboard/roam" style="display: inline;">
+                      <button type="submit" class="btn btn-danger">Remove</button>
+                    </form>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : '<p class="text-muted">No graphs connected yet.</p>'}
+      </div>
+
+      <div class="card">
+        <h3>Add Graph</h3>
+        <p class="text-muted">Create an API token in Roam: Settings &rarr; Graph &rarr; API tokens.</p>
+        <form id="roam-connect-form" method="post" action="/connect/roam">
+          <div style="display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap;">
+            <div>
+              <label for="graphName">Graph Name</label>
+              <input type="text" id="graphName" name="graphName" placeholder="my-graph" required style="width: 200px;">
+            </div>
+            <div>
+              <label for="token">API Token</label>
+              <input type="password" id="token" name="token" placeholder="roam-graph-token-..." required style="width: 300px;">
+            </div>
+            <button type="submit" id="roam-connect-btn" class="btn btn-primary">Connect</button>
+          </div>
+        </form>
+      </div>
+
+      <script>
+        document.getElementById('roam-connect-form').addEventListener('submit', function() {
+          var btn = document.getElementById('roam-connect-btn');
+          btn.disabled = true;
+          btn.textContent = 'Connecting...';
+          btn.style.opacity = '0.7';
+        });
+      </script>
+    `;
+
+    return c.html(layout('Roam Settings', content));
   });
 
   // Correction page

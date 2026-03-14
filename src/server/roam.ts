@@ -76,7 +76,7 @@ export function buildRoamRoutes(app: Hono, storage: StorageInterface): void {
     const token = body.token;
 
     if (!graphName || !token) {
-      return c.redirect('/dashboard/auth?error=' + encodeURIComponent('Graph name and token are required'));
+      return c.redirect('/dashboard/roam?error=missing_fields');
     }
 
     try {
@@ -85,7 +85,7 @@ export function buildRoamRoutes(app: Hono, storage: StorageInterface): void {
     } catch (err) {
       console.error('[Roam] Connection test failed:', err);
       const message = err instanceof Error ? err.message : String(err);
-      return c.redirect('/dashboard/auth?error=' + encodeURIComponent(`Roam connection failed: ${message}`));
+      return c.redirect('/dashboard/roam?error=connection_failed');
     }
 
     const existing = await storage.getRoamConfig(auth.uid);
@@ -99,7 +99,7 @@ export function buildRoamRoutes(app: Hono, storage: StorageInterface): void {
     await storage.saveRoamConfig(auth.uid, { graphs });
     console.log(`[Roam] Graph "${graphName}" connected for user: ${auth.uid}`);
 
-    return c.redirect('/dashboard/auth');
+    return c.redirect('/dashboard/roam');
   });
 
   // Form-based: disconnect a Roam graph (dashboard)
