@@ -70,7 +70,8 @@ class RoamClient {
   getBlockChildren(uid: string): Promise<Block[]>;
   // Searches only direct children of a page — intentional, since
   // daily_tagged needs the top-level tag block, not deeply nested matches
-  findBlockOnPage(pageUid: string, text: string): Promise<{uid: string, string: string} | null>;
+  // Takes page title (not UID) because the Datalog query uses :node/title
+  findBlockOnPage(pageTitle: string, text: string): Promise<{uid: string, string: string} | null>;
 
   // Write — wraps SDK's createBlock/createPage
   createPage(title: string): Promise<boolean>;
