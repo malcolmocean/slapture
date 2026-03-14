@@ -85,6 +85,9 @@ export class CapturePipeline {
       capture.routeConfidence = dispatchResult.confidence;
       this.addTrace(capture, 'dispatch', parsed, dispatchResult, dispatchStart);
 
+      // Store matched trigger pattern for dashboard display
+      capture.matchedTrigger = dispatchResult.matchedTrigger?.pattern ?? null;
+
       // Step 3: Handle dispatch result
       let route: Route | null = null;
 
@@ -233,18 +236,44 @@ export class CapturePipeline {
         }
       }
 
+      // Step 3.5: Run pipeline string transform for non-fs destinations
+      // fs destinations handle transforms in the executor (imperative I/O scripts)
+      // Non-fs destinations use pipeline-level string transforms (result = ... convention)
+      let effectivePayload = parsed.payload;
+      if (route && route.transformScript && route.destinationType !== 'fs') {
+        try {
+          const vm = await import('vm');
+          const transformContext = vm.createContext({
+            payload: parsed.payload,
+            metadata: parsed.metadata,
+            timestamp: capture.timestamp,
+            JSON,
+            console: { log: () => {}, error: () => {} },
+          });
+          vm.runInContext(route.transformScript, transformContext, { timeout: 5000 });
+          const result = (transformContext as Record<string, unknown>).result as string | undefined;
+          if (result !== undefined && result !== parsed.payload) {
+            effectivePayload = result;
+            capture.transformedPayload = result;
+          }
+        } catch (error) {
+          console.error(`[Pipeline] Transform failed: ${error}`);
+          // Fall through with original payload
+        }
+      }
+
       // Step 4: Execute
       if (route) {
         const executeStart = Date.now();
         const execResult = await this.executor.execute(
           route,
-          parsed.payload,
+          effectivePayload,
           username,
           parsed.metadata,
           capture.timestamp,
           capture
         );
-        this.addTrace(capture, 'execute', { route: route.id, payload: parsed.payload }, execResult, executeStart);
+        this.addTrace(capture, 'execute', { route: route.id, payload: effectivePayload }, execResult, executeStart);
 
         // Handle blocked states (OAuth required)
         if (execResult.status === 'blocked_needs_auth' || execResult.status === 'blocked_auth_expired') {
@@ -824,10 +853,35 @@ export class CapturePipeline {
       return { capture };
     }
 
+    // Run pipeline string transform for non-fs destinations (same as process())
+    const originalPayload = capture.parsed?.payload || capture.raw;
+    let effectivePayload = originalPayload;
+    if (route.transformScript && route.destinationType !== 'fs') {
+      try {
+        const vm = await import('vm');
+        const transformContext = vm.createContext({
+          payload: originalPayload,
+          metadata: capture.parsed?.metadata || {},
+          timestamp: capture.timestamp,
+          JSON,
+          console: { log: () => {}, error: () => {} },
+        });
+        vm.runInContext(route.transformScript, transformContext, { timeout: 5000 });
+        const transformResult = (transformContext as Record<string, unknown>).result as string | undefined;
+        if (transformResult !== undefined && transformResult !== originalPayload) {
+          effectivePayload = transformResult;
+          capture.transformedPayload = transformResult;
+        }
+      } catch (error) {
+        console.error(`[Pipeline] Retry transform failed: ${error}`);
+        // Fall through with original payload
+      }
+    }
+
     const startTime = Date.now();
     const result = await this.executor.execute(
       route,
-      capture.parsed?.payload || capture.raw,
+      effectivePayload,
       username,
       capture.parsed?.metadata || {},
       capture.timestamp,
@@ -846,7 +900,7 @@ export class CapturePipeline {
     capture.executionTrace.push({
       step: 'execute',
       timestamp: new Date().toISOString(),
-      input: { route: route.id, payload: capture.parsed?.payload, retryAttempt: true },
+      input: { route: route.id, payload: effectivePayload, retryAttempt: true },
       output: result,
       codeVersion: this.codeVersion,
       durationMs: Date.now() - startTime

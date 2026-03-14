@@ -103,6 +103,79 @@ describe('CapturePipeline', () => {
     });
   });
 
+  describe('pipeline string transform for non-fs destinations', () => {
+    it('should run transformScript and set transformedPayload for non-fs destination', async () => {
+      // Create a route with a notes destination and a transformScript
+      // Use a trigger pattern that matches without the colon-prefix syntax
+      // (colon syntax causes the parser to treat it as an explicit route name)
+      const notesRoute: Route = {
+        id: 'route-notes-transform',
+        name: 'notes-transform',
+        description: 'Notes with transform',
+        triggers: [{ type: 'regex' as const, pattern: '^MEMO\\b', priority: 10 }],
+        schema: null,
+        recentItems: [],
+        destinationType: 'notes',
+        destinationConfig: { target: 'integration', id: 'notes' },
+        transformScript: "result = payload.toUpperCase();",
+        createdAt: '2026-01-21T12:00:00Z',
+        createdBy: 'user',
+        lastUsed: null,
+      };
+      await storage.saveRoute(notesRoute);
+
+      // Re-create pipeline so it picks up the new route
+      pipeline = new CapturePipeline(storage, TEST_FILESTORE, 'test-api-key');
+
+      // Input without colon so parser doesn't treat "MEMO" as explicit route
+      const result = await pipeline.process('MEMO remember this', 'testuser');
+
+      expect(result.capture.transformedPayload).toBe('MEMO REMEMBER THIS');
+    });
+
+    it('should NOT run pipeline transform for fs destinations', async () => {
+      // The existing dump route is fs - its transform is imperative (handled by executor)
+      const result = await pipeline.process('dump: hello world', 'testuser');
+
+      // fs destinations do NOT get pipeline transform - transformedPayload should be undefined/null
+      expect(result.capture.transformedPayload).toBeUndefined();
+    });
+  });
+
+  describe('matchedTrigger stored on capture', () => {
+    it('should store matchedTrigger pattern when a trigger matches', async () => {
+      // Create a route with a regex trigger (not explicit route match)
+      const regexRoute: Route = {
+        id: 'route-regex-match',
+        name: 'regex-match',
+        description: 'Regex matched route',
+        triggers: [{ type: 'regex' as const, pattern: '^weight\\s+\\d+', priority: 10 }],
+        schema: null,
+        recentItems: [],
+        destinationType: 'fs',
+        destinationConfig: { filePath: 'weight.txt' },
+        transformScript: "fs.appendFileSync(filePath, payload + '\\n')",
+        createdAt: '2026-01-21T12:00:00Z',
+        createdBy: 'user',
+        lastUsed: null,
+      };
+      await storage.saveRoute(regexRoute);
+
+      pipeline = new CapturePipeline(storage, TEST_FILESTORE, 'test-api-key');
+
+      const result = await pipeline.process('weight 185', 'testuser');
+
+      expect(result.capture.matchedTrigger).toBe('^weight\\s+\\d+');
+    });
+
+    it('should not set matchedTrigger for explicit route matches', async () => {
+      const result = await pipeline.process('dump: hello', 'testuser');
+
+      // Explicit route match doesn't go through trigger matching — matchedTrigger is null
+      expect(result.capture.matchedTrigger).toBeNull();
+    });
+  });
+
   describe('retryCapture', () => {
     it('should use stored username in retryCapture', async () => {
       // Create a capture that was blocked (simulating OAuth required scenario)
