@@ -45,7 +45,7 @@ describe.skipIf(!hasCredentials)('Sheets route: append_row with field extraction
     executor = new SheetsExecutor(new FileSheetsAuthProvider());
     const creds = loadCredentials();
     const client = createSheetsClient(creds);
-    sheet = { client, spreadsheetId: TEST_SPREADSHEET_ID, sheetName: 'test_append_simple' };
+    sheet = { client, spreadsheetId: TEST_SPREADSHEET_ID, sheetName: 'expense_log' };
   });
 
   afterEach(async () => {
@@ -71,7 +71,7 @@ describe.skipIf(!hasCredentials)('Sheets route: append_row with field extraction
       destinationType: 'sheets',
       destinationConfig: {
         spreadsheetId: TEST_SPREADSHEET_ID,
-        sheetName: 'test_append_simple',
+        sheetName: 'expense_log',
         operation: {
           type: 'append_row',
           columns: [
@@ -124,7 +124,7 @@ describe.skipIf(!hasCredentials)('Sheets route: lookup_append_to_row with date m
     executor = new SheetsExecutor(new FileSheetsAuthProvider());
     const creds = loadCredentials();
     const client = createSheetsClient(creds);
-    sheet = { client, spreadsheetId: TEST_SPREADSHEET_ID, sheetName: 'test_date_lookup' };
+    sheet = { client, spreadsheetId: TEST_SPREADSHEET_ID, sheetName: 'daily_journal' };
   });
 
   afterEach(async () => {
@@ -150,7 +150,7 @@ describe.skipIf(!hasCredentials)('Sheets route: lookup_append_to_row with date m
       destinationType: 'sheets',
       destinationConfig: {
         spreadsheetId: TEST_SPREADSHEET_ID,
-        sheetName: 'test_date_lookup',
+        sheetName: 'daily_journal',
         operation: {
           type: 'lookup_append_to_row',
           rowLookup: {
@@ -177,7 +177,7 @@ describe.skipIf(!hasCredentials)('Sheets route: lookup_append_to_row with date m
 
     // If today's date is not in the sheet, this will fail - that's expected
     if (result.status === 'failed' && result.error?.includes('Row lookup failed')) {
-      console.log('Expected: no row for today in test sheet (test_date_lookup covers Apr 1-14 2026)');
+      console.log('Expected: no row for today in test sheet (daily_journal covers Apr 1-14 2026)');
       return;
     }
 
@@ -223,7 +223,7 @@ describe.skipIf(!hasCredentials)('Sheets route: lookup_set_cell with fuzzy match
     executor = new SheetsExecutor(new FileSheetsAuthProvider());
     const creds = loadCredentials();
     const client = createSheetsClient(creds);
-    sheet = { client, spreadsheetId: TEST_SPREADSHEET_ID, sheetName: 'test_2d_lookup' };
+    sheet = { client, spreadsheetId: TEST_SPREADSHEET_ID, sheetName: 'fitness_tracker' };
   });
 
   afterEach(async () => {
@@ -288,7 +288,7 @@ describe.skipIf(!hasCredentials)('Sheets route: lookup_set_cell with fuzzy match
       destinationType: 'sheets',
       destinationConfig: {
         spreadsheetId: TEST_SPREADSHEET_ID,
-        sheetName: 'test_2d_lookup',
+        sheetName: 'fitness_tracker',
         operation: {
           type: 'lookup_set_cell',
           rowLookup: {
@@ -324,7 +324,7 @@ describe.skipIf(!hasCredentials)('Sheets route: lookup_set_cell with fuzzy match
 
     // May fail if today's date column doesn't exist in the sheet
     if (result.status === 'failed' && result.error?.includes('Column lookup failed')) {
-      console.log('Expected: no column for today in test sheet (test_2d_lookup covers Apr 1-14 2026)');
+      console.log('Expected: no column for today in test sheet (fitness_tracker covers Apr 1-14 2026)');
       return;
     }
 
@@ -349,14 +349,14 @@ describe.skipIf(!hasCredentials)('Sheets route: lookup_set_cell with fuzzy match
 
 // ─── 4. Haiku fuzzy matching with author context ────────────────────────────
 
-describe.skipIf(!hasCredentials || !hasAnthropicKey)('Sheets route: Haiku fuzzy matching (test_fuzzy_match)', () => {
+describe.skipIf(!hasCredentials || !hasAnthropicKey)('Sheets route: Haiku fuzzy matching (media_library)', () => {
   let sheet: SheetRef;
   let executor: SheetsExecutor;
 
   beforeAll(() => {
     const creds = loadCredentials();
     const client = createSheetsClient(creds);
-    sheet = { client, spreadsheetId: TEST_SPREADSHEET_ID, sheetName: 'test_fuzzy_match' };
+    sheet = { client, spreadsheetId: TEST_SPREADSHEET_ID, sheetName: 'media_library' };
     executor = new SheetsExecutor(new FileSheetsAuthProvider(), process.env.ANTHROPIC_API_KEY);
   });
 
