@@ -101,6 +101,87 @@ describe('Dispatcher', () => {
     });
   });
 
+  describe('trigger captures', () => {
+    it('should extract named fields from capture groups', () => {
+      const routesWithCaptures: Route[] = [
+        {
+          id: 'route-gwen',
+          name: 'gwen_memories',
+          description: 'Gwen memories',
+          triggers: [{
+            type: 'regex',
+            pattern: '^gwen\\s+memor(?:y|ies?):\\s*(.+)',
+            captures: { content: 1 },
+            priority: 10,
+          }],
+          schema: null,
+          recentItems: [],
+          destinationType: 'sheets',
+          destinationConfig: { spreadsheetId: 'abc', sheetName: 'Sheet1', operation: {} },
+          transformScript: null,
+          createdAt: '2026-01-01T00:00:00Z',
+          createdBy: 'mastermind',
+          lastUsed: null,
+        },
+      ];
+      const d = new Dispatcher(routesWithCaptures);
+
+      const result = d.dispatch({
+        explicitRoute: null,
+        payload: 'gwen memory: she woke up early at 5am',
+        metadata: {},
+      });
+
+      expect(result.routeId).toBe('route-gwen');
+      expect(result.extractedFields).toEqual({ content: 'she woke up early at 5am' });
+    });
+
+    it('should return undefined extractedFields when trigger has no captures', () => {
+      // Use the existing routes fixture (no captures defined)
+      const result = dispatcher.dispatch({
+        explicitRoute: null,
+        payload: 'weight 88.2kg',
+        metadata: {},
+      });
+
+      expect(result.routeId).toBe('route-weight');
+      expect(result.extractedFields).toBeUndefined();
+    });
+
+    it('should extract multiple fields from different capture groups', () => {
+      const routesMulti: Route[] = [
+        {
+          id: 'route-multi',
+          name: 'multi_field',
+          description: 'Multiple field extraction',
+          triggers: [{
+            type: 'regex',
+            pattern: '^(\\w+)\\s+(\\d+\\.?\\d*)\\s*(kg|lbs?)?$',
+            captures: { metric: 1, value: 2, unit: 3 },
+            priority: 10,
+          }],
+          schema: null,
+          recentItems: [],
+          destinationType: 'sheets',
+          destinationConfig: { spreadsheetId: 'abc', sheetName: 'Sheet1', operation: {} },
+          transformScript: null,
+          createdAt: '2026-01-01T00:00:00Z',
+          createdBy: 'mastermind',
+          lastUsed: null,
+        },
+      ];
+      const d = new Dispatcher(routesMulti);
+
+      const result = d.dispatch({
+        explicitRoute: null,
+        payload: 'weight 85.5 kg',
+        metadata: {},
+      });
+
+      expect(result.extractedFields).toEqual({ metric: 'weight', value: '85.5', unit: 'kg' });
+    });
+  });
+
   describe('priority ordering', () => {
     it('should prefer higher priority triggers', () => {
       const routesWithConflict: Route[] = [

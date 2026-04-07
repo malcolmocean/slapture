@@ -35,12 +35,13 @@ export class Dispatcher {
     }
 
     // Collect all matching triggers with their routes
-    const matches: Array<{ route: Route; trigger: Route['triggers'][0] }> = [];
+    const matches: Array<{ route: Route; trigger: Route['triggers'][0]; match: RegExpMatchArray }> = [];
 
     for (const route of this.routes) {
       for (const trigger of route.triggers) {
-        if (this.triggerMatches(trigger, parsed.payload)) {
-          matches.push({ route, trigger });
+        const match = this.triggerMatch(trigger, parsed.payload);
+        if (match) {
+          matches.push({ route, trigger, match });
         }
       }
     }
@@ -59,6 +60,18 @@ export class Dispatcher {
     const best = matches[0];
     const confidence = matches.length === 1 ? 'medium' : 'low';
 
+    // Extract named fields if trigger defines captures
+    let extractedFields: Record<string, string> | undefined;
+    if (best.trigger.captures) {
+      extractedFields = {};
+      for (const [fieldName, groupIndex] of Object.entries(best.trigger.captures)) {
+        const value = best.match[groupIndex];
+        if (value !== undefined) {
+          extractedFields[fieldName] = value;
+        }
+      }
+    }
+
     return {
       routeId: best.route.id,
       confidence,
@@ -66,20 +79,20 @@ export class Dispatcher {
         matches.length > 1 ? ` (${matches.length} matches, using highest priority)` : ''
       }`,
       matchedTrigger: best.trigger,
+      extractedFields,
     };
   }
 
-  private triggerMatches(trigger: Route['triggers'][0], payload: string): boolean {
-    // Phase 4: Only regex triggers remain
+  private triggerMatch(trigger: Route['triggers'][0], payload: string): RegExpMatchArray | null {
     if (trigger.type !== 'regex') {
-      return false;
+      return null;
     }
 
     try {
       const regex = new RegExp(trigger.pattern, 'i');
-      return regex.test(payload);
+      return payload.match(regex);
     } catch {
-      return false;
+      return null;
     }
   }
 }
