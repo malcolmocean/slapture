@@ -25,13 +25,13 @@ export class RouteExecutor {
   private sheetsExecutor: SheetsExecutor | null;
   private roamExecutor: RoamExecutor | null;
 
-  constructor(filestoreRoot: string = './filestore', storage?: StorageInterface, sheetsAuthProvider?: SheetsAuthProvider) {
+  constructor(filestoreRoot: string = './filestore', storage?: StorageInterface, sheetsAuthProvider?: SheetsAuthProvider, anthropicApiKey?: string) {
     this.filestoreRoot = filestoreRoot;
     this.storage = storage || null;
     this.intendExecutor = storage ? new IntendExecutor(storage) : null;
     this.notesExecutor = storage ? new NotesExecutor(storage) : null;
     const authProvider = sheetsAuthProvider ?? new FileSheetsAuthProvider();
-    this.sheetsExecutor = new SheetsExecutor(authProvider);
+    this.sheetsExecutor = new SheetsExecutor(authProvider, anthropicApiKey);
     this.roamExecutor = storage ? new RoamExecutor(storage) : null;
   }
 

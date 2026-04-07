@@ -42,7 +42,7 @@ export class CapturePipeline {
     this.storage = storage;
     this.parser = new Parser();
     this.dispatcher = new Dispatcher([]);
-    this.executor = new RouteExecutor(filestoreRoot, storage, sheetsAuthProvider);
+    this.executor = new RouteExecutor(filestoreRoot, storage, sheetsAuthProvider, apiKey);
     this.mastermind = new Mastermind(apiKey);
     this.evolver = new Evolver(apiKey);
     this.validator = new Validator(apiKey);

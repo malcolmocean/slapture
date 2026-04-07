@@ -69,6 +69,8 @@ export interface LookupSpec {
   valueSource: ValueSpec;
   match: 'exact' | 'fuzzy' | 'date';
   range?: [number, number];
+  /** Additional column indices to include as context for fuzzy matching (e.g. author column alongside title) */
+  fuzzyContextColumns?: number[];
   /** If not found, create a new row/column with this template */
   createIfMissing?: {
     template: ValueSpec[];
@@ -100,9 +102,11 @@ export type ColumnSpec =
 
 export class SheetsExecutor {
   private authProvider: SheetsAuthProvider;
+  private anthropicApiKey: string | undefined;
 
-  constructor(authProvider: SheetsAuthProvider) {
+  constructor(authProvider: SheetsAuthProvider, anthropicApiKey?: string) {
     this.authProvider = authProvider;
+    this.anthropicApiKey = anthropicApiKey;
   }
 
   async execute(route: Route, capture: Capture): Promise<SheetsExecutionResult> {
@@ -200,7 +204,7 @@ export class SheetsExecutor {
       match: operation.rowLookup.match,
       range: operation.rowLookup.range,
       fuzzyMatcher: operation.rowLookup.match === 'fuzzy'
-        ? this.createFuzzyMatcher()
+        ? await this.createFuzzyMatcher(sheet, operation.rowLookup)
         : undefined,
       createIfMissing,
     });
@@ -401,18 +405,100 @@ export class SheetsExecutor {
     return eval(sanitized);
   }
 
-  private createFuzzyMatcher(): (candidates: string[], target: string) => Promise<number | null> {
-    // Simple fuzzy matcher for now - substring match
-    // TODO: Replace with LLM-based matching
+  private async createFuzzyMatcher(
+    sheet?: SheetRef,
+    lookupSpec?: LookupSpec
+  ): Promise<(candidates: string[], target: string) => Promise<number | null>> {
+    // Pre-read context columns (e.g. author alongside title) if configured
+    let contextData: Map<number, string[]> = new Map();
+    if (sheet && lookupSpec?.fuzzyContextColumns?.length && lookupSpec.range) {
+      for (const colIdx of lookupSpec.fuzzyContextColumns) {
+        const values = await toolkit.getValues(sheet, {
+          axis: 'row',
+          at: colIdx,
+          range: lookupSpec.range,
+        });
+        contextData.set(colIdx, values.map(v => String(v ?? '')));
+      }
+    }
+
+    // Build enriched candidate strings (e.g. "Title | Author")
+    const enrichCandidates = (candidates: string[]): string[] => {
+      if (contextData.size === 0) return candidates;
+      return candidates.map((c, i) => {
+        const extra = [...contextData.values()].map(col => col[i] || '').filter(v => v).join(' | ');
+        return extra ? `${c} | ${extra}` : c;
+      });
+    };
+
+    if (!this.anthropicApiKey) {
+      return async (candidates: string[], target: string): Promise<number | null> => {
+        const lowerTarget = target.toLowerCase();
+        const enriched = enrichCandidates(candidates);
+        for (let i = 0; i < enriched.length; i++) {
+          const candidate = enriched[i].toLowerCase();
+          if (candidate.includes(lowerTarget) || lowerTarget.includes(candidate)) {
+            return i;
+          }
+        }
+        return null;
+      };
+    }
+
+    const apiKey = this.anthropicApiKey;
     return async (candidates: string[], target: string): Promise<number | null> => {
+      const enriched = enrichCandidates(candidates);
+
+      // First try substring match on enriched candidates
       const lowerTarget = target.toLowerCase();
-      for (let i = 0; i < candidates.length; i++) {
-        const candidate = candidates[i]?.toLowerCase() ?? '';
+      for (let i = 0; i < enriched.length; i++) {
+        const candidate = enriched[i].toLowerCase();
         if (candidate.includes(lowerTarget) || lowerTarget.includes(candidate)) {
           return i;
         }
       }
-      return null;
+
+      // No substring match — ask Haiku
+      try {
+        const numbered = enriched
+          .filter(c => c.trim())
+          .map((c, i) => `${i}: ${c}`)
+          .join('\n');
+
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 20,
+            messages: [{
+              role: 'user',
+              content: `Which of these entries matches "${target}"? Consider alternate titles, abbreviations, author last names, and common ways people refer to books/items. Respond with ONLY the number, or "none" if no match.\n\n${numbered}`,
+            }],
+          }),
+        });
+
+        if (!response.ok) {
+          console.error(`[FuzzyMatcher] Haiku API error: ${response.status}`);
+          return null;
+        }
+
+        const data = await response.json() as { content: Array<{ text: string }> };
+        const text = data.content?.[0]?.text?.trim() ?? '';
+        if (text === 'none') return null;
+        const idx = parseInt(text);
+        if (!isNaN(idx) && idx >= 0 && idx < candidates.length) {
+          return idx;
+        }
+        return null;
+      } catch (error) {
+        console.error(`[FuzzyMatcher] Error:`, error);
+        return null;
+      }
     };
   }
 }
