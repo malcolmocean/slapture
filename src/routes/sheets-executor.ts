@@ -84,7 +84,8 @@ export type ValueSpec =
   | { type: 'payload' }  // Full payload
   | { type: 'extract'; pattern: string; group?: number }  // Regex extract from payload
   | { type: 'computed'; expression: string }  // Simple expression like "kg * 2.20462"
-  | { type: 'literal'; value: unknown };
+  | { type: 'literal'; value: unknown }
+  | { type: 'field'; name: string };
 
 /**
  * How to derive a column value for append_row.
@@ -94,7 +95,8 @@ export type ColumnSpec =
   | { type: 'payload' }
   | { type: 'extract'; pattern: string; group?: number }
   | { type: 'computed'; expression: string }
-  | { type: 'literal'; value: unknown };
+  | { type: 'literal'; value: unknown }
+  | { type: 'field'; name: string };
 
 export class SheetsExecutor {
   private authProvider: SheetsAuthProvider;
@@ -106,6 +108,7 @@ export class SheetsExecutor {
   async execute(route: Route, capture: Capture): Promise<SheetsExecutionResult> {
     const config = route.destinationConfig as SheetsDestinationConfig;
     const payload = capture.parsed?.payload || capture.raw;
+    const fields = capture.extractedFields ?? {};
 
     // Get sheets credentials
     const sheet = await this.getSheetRef(config.spreadsheetId, config.sheetName, capture.username);
@@ -117,7 +120,7 @@ export class SheetsExecutor {
     }
 
     try {
-      const result = await this.executeOperation(sheet, config.operation, payload);
+      const result = await this.executeOperation(sheet, config.operation, payload, fields);
       return {
         status: 'success',
         data: result,
@@ -143,15 +146,16 @@ export class SheetsExecutor {
   private async executeOperation(
     sheet: SheetRef,
     operation: SheetsOperation,
-    payload: string
+    payload: string,
+    fields: Record<string, string>
   ): Promise<unknown> {
     switch (operation.type) {
       case 'append_row':
-        return this.executeAppendRow(sheet, operation, payload);
+        return this.executeAppendRow(sheet, operation, payload, fields);
       case 'lookup_set_cell':
-        return this.executeLookupSetCell(sheet, operation, payload);
+        return this.executeLookupSetCell(sheet, operation, payload, fields);
       case 'lookup_append_to_row':
-        return this.executeLookupAppendToRow(sheet, operation, payload);
+        return this.executeLookupAppendToRow(sheet, operation, payload, fields);
       default:
         throw new Error(`Unknown operation type: ${(operation as any).type}`);
     }
@@ -160,9 +164,10 @@ export class SheetsExecutor {
   private async executeAppendRow(
     sheet: SheetRef,
     operation: AppendRowOperation,
-    payload: string
+    payload: string,
+    fields: Record<string, string>
   ): Promise<{ row: number }> {
-    const context = this.buildContext(payload);
+    const context = this.buildContext(payload, fields);
     const values = operation.columns.map((col, index) =>
       this.resolveColumnSpec(col, context, index)
     );
@@ -172,9 +177,10 @@ export class SheetsExecutor {
   private async executeLookupSetCell(
     sheet: SheetRef,
     operation: LookupSetCellOperation,
-    payload: string
+    payload: string,
+    fields: Record<string, string>
   ): Promise<{ row: number; col: number }> {
-    const context = this.buildContext(payload);
+    const context = this.buildContext(payload, fields);
 
     // Do row lookup
     const rowValue = this.resolveValueSpec(operation.rowLookup.valueSource, context);
@@ -231,9 +237,10 @@ export class SheetsExecutor {
   private async executeLookupAppendToRow(
     sheet: SheetRef,
     operation: LookupAppendToCellOperation,
-    payload: string
+    payload: string,
+    fields: Record<string, string>
   ): Promise<{ row: number; col: number }> {
-    const context = this.buildContext(payload);
+    const context = this.buildContext(payload, fields);
 
     // Do row lookup
     const rowValue = this.resolveValueSpec(operation.rowLookup.valueSource, context);
@@ -280,11 +287,12 @@ export class SheetsExecutor {
     return { row: rowResult.index, col: emptyColIndex };
   }
 
-  private buildContext(payload: string): ExecutionContext {
+  private buildContext(payload: string, fields: Record<string, string> = {}): ExecutionContext {
     return {
       payload,
       today: new Date(),
       extractions: {},
+      fields,
     };
   }
 
@@ -314,6 +322,13 @@ export class SheetsExecutor {
       }
       case 'literal':
         return spec.value;
+      case 'field': {
+        const value = context.fields[spec.name];
+        if (value === undefined) {
+          throw new Error(`Field "${spec.name}" not found in extractedFields. Available: ${Object.keys(context.fields).join(', ')}`);
+        }
+        return value;
+      }
       default:
         throw new Error(`Unknown value spec type: ${(spec as any).type}`);
     }
@@ -359,6 +374,18 @@ export class SheetsExecutor {
       }
       case 'literal':
         return spec.value;
+      case 'field': {
+        const value = context.fields[spec.name];
+        if (value === undefined) {
+          return '';
+        }
+        context.extractions[`_col${colIndex}`] = value;
+        const num = parseFloat(value);
+        if (!isNaN(num) && String(num) === value.trim()) {
+          return num;
+        }
+        return value;
+      }
       default:
         throw new Error(`Unknown column spec type: ${(spec as any).type}`);
     }
@@ -394,4 +421,5 @@ interface ExecutionContext {
   payload: string;
   today: Date;
   extractions: Record<string, unknown>;
+  fields: Record<string, string>;
 }
