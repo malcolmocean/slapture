@@ -176,6 +176,69 @@ describe('CapturePipeline', () => {
     });
   });
 
+  describe('extractedFields stored on capture', () => {
+    it('should store extractedFields when dispatcher returns them from trigger captures', async () => {
+      // Create a route with a regex trigger that has captures config
+      const captureRoute: Route = {
+        id: 'route-captures',
+        name: 'captures-route',
+        description: 'Route with captures',
+        triggers: [{ type: 'regex' as const, pattern: '^LOG\\s+(?<content>.+)', priority: 10, captures: { content: 1 } }],
+        schema: null,
+        recentItems: [],
+        destinationType: 'fs',
+        destinationConfig: { filePath: 'log.txt' },
+        transformScript: "fs.appendFileSync(filePath, payload + '\\n')",
+        createdAt: '2026-01-21T12:00:00Z',
+        createdBy: 'user',
+        lastUsed: null,
+      };
+      await storage.saveRoute(captureRoute);
+
+      pipeline = new CapturePipeline(storage, TEST_FILESTORE, 'test-api-key');
+
+      const result = await pipeline.process('LOG some content here', 'testuser');
+
+      expect(result.capture.extractedFields).toBeDefined();
+      expect(result.capture.extractedFields?.content).toBe('some content here');
+    });
+
+    it('should auto-populate extractedFields from payload for explicit route matches with captures config', async () => {
+      // Create a route with captures config on a trigger
+      const gwenRoute: Route = {
+        id: 'route-gwen',
+        name: 'gwen memory',
+        description: 'Gwen memories',
+        triggers: [{ type: 'prefix' as const, pattern: 'gwen memory', priority: 10, captures: { memory: 0 } }],
+        schema: null,
+        recentItems: [],
+        destinationType: 'fs',
+        destinationConfig: { filePath: 'gwen.txt' },
+        transformScript: "fs.appendFileSync(filePath, payload + '\\n')",
+        createdAt: '2026-01-21T12:00:00Z',
+        createdBy: 'user',
+        lastUsed: null,
+      };
+      await storage.saveRoute(gwenRoute);
+
+      pipeline = new CapturePipeline(storage, TEST_FILESTORE, 'test-api-key');
+
+      // Explicit route: parser strips "gwen memory: " prefix, payload = "she woke up early"
+      const result = await pipeline.process('gwen memory: she woke up early', 'testuser');
+
+      expect(result.capture.executionResult).toBe('success');
+      expect(result.capture.extractedFields).toBeDefined();
+      expect(result.capture.extractedFields?.memory).toBe('she woke up early');
+    });
+
+    it('should not set extractedFields when route has no captures config', async () => {
+      // The existing dump route has no captures config
+      const result = await pipeline.process('dump: plain text', 'testuser');
+
+      expect(result.capture.extractedFields).toBeUndefined();
+    });
+  });
+
   describe('retryCapture', () => {
     it('should use stored username in retryCapture', async () => {
       // Create a capture that was blocked (simulating OAuth required scenario)

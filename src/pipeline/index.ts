@@ -88,11 +88,29 @@ export class CapturePipeline {
       // Store matched trigger pattern for dashboard display
       capture.matchedTrigger = dispatchResult.matchedTrigger?.pattern ?? null;
 
+      // Store extracted fields from trigger captures
+      if (dispatchResult.extractedFields) {
+        capture.extractedFields = dispatchResult.extractedFields;
+      }
+
       // Step 3: Handle dispatch result
       let route: Route | null = null;
 
       if (dispatchResult.routeId) {
         route = await this.storage.getRoute(dispatchResult.routeId);
+      }
+
+      // For explicit route matches, auto-populate extractedFields from parsed payload.
+      // The parser already stripped the prefix, so payload IS the content.
+      if (route && dispatchResult.confidence === 'high' && !dispatchResult.extractedFields) {
+        const primaryTrigger = route.triggers.find(t => t.captures);
+        if (primaryTrigger?.captures) {
+          const fields: Record<string, string> = {};
+          for (const fieldName of Object.keys(primaryTrigger.captures)) {
+            fields[fieldName] = parsed.payload;
+          }
+          capture.extractedFields = fields;
+        }
       }
 
       // Step 3a: LLM Validation (if trigger-matched route with validation enabled)
