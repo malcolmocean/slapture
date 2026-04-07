@@ -220,6 +220,11 @@ export class CapturePipeline {
           console.log(`[Pipeline] Resolved route: ${route?.id || 'NOT FOUND'}`);
           routedByMastermind = true;
 
+          // Store fields extracted by Mastermind
+          if (action.extractedFields) {
+            capture.extractedFields = { ...capture.extractedFields, ...action.extractedFields };
+          }
+
           // Evolver fires when Mastermind routes to existing
           if (route) {
             const evolvedRoute = await this.tryEvolveRoute(capture, route, raw, action.reason, routes);
@@ -241,6 +246,11 @@ export class CapturePipeline {
           await this.storage.saveRoute(newRoute);
           route = newRoute;
           routedByMastermind = true;
+
+          // Store fields extracted by Mastermind
+          if (action.extractedFields) {
+            capture.extractedFields = { ...capture.extractedFields, ...action.extractedFields };
+          }
 
           // Update dispatcher with new route
           this.dispatcher.updateRoutes([...routes, newRoute]);

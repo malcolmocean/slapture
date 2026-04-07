@@ -176,8 +176,9 @@ Capture to process:
 - Dispatcher result: ${dispatcherReason}
 
 Your options:
-1. Route to existing: {"action": "route", "routeId": "...", "reason": "..."}
-2. Create new route: {"action": "create", "route": {name, description, triggers: [{type: "regex", pattern, priority, status: "draft"}], destinationType, destinationConfig, transformScript, schema, createdBy: "mastermind"}, "reason": "..."}
+1. Route to existing: {"action": "route", "routeId": "...", "reason": "...", "extractedFields": {"fieldName": "value"}}
+   Include extractedFields when the target route's columns use {type: "field"} specs.
+2. Create new route: {"action": "create", "route": {name, description, triggers: [{type: "regex", pattern: "...", captures: {fieldName: 1}, priority: 10, status: "draft"}], destinationType, destinationConfig, transformScript, schema, createdBy: "mastermind"}, "reason": "..."}
 3. Need clarification: {"action": "clarify", "question": "...", "reason": "..."}
 4. Send to inbox: {"action": "inbox", "reason": "..."}
 
@@ -240,8 +241,9 @@ Operations:
 
 ColumnSpec / ValueSpec types:
 - {type: "today", format?: "short"} — current date
-- {type: "payload"} — full parsed payload
-- {type: "extract", pattern: "<regex>", group?: 1} — regex capture from payload
+- {type: "payload"} — full parsed payload (after prefix stripping)
+- {type: "field", name: "<fieldName>"} — reference a named extracted field (preferred for trigger-captured content)
+- {type: "extract", pattern: "<regex>", group?: 1} — regex capture from payload (for destination-local extraction only)
 - {type: "computed", expression: "<arithmetic>"} — safe math eval
 - {type: "literal", value: <any>} — static value
 
@@ -283,6 +285,12 @@ When creating routes for "log X to Y" patterns:
 Trigger types: Only "regex" is supported. Use regex patterns like:
 - /^pattern\\b/i for prefix-like matching
 - /pattern/i for substring matching (use sparingly - can be too broad)
+
+When creating triggers with capture groups, add a "captures" map to extract named fields:
+  triggers: [{type: "regex", pattern: "^gwen\\s+memor(?:y|ies?):\\s*(.+)", captures: {content: 1}, priority: 10, status: "draft"}]
+Then reference in columns: {type: "field", name: "content"}
+This separates input parsing (trigger's job) from destination format (config's job).
+For routes where the Mastermind does the routing (not triggers), include extractedFields in your response.
 
 For CSV files, include date as first column. For log files, prefix each line with date.
 
