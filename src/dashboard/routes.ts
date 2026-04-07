@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import type { StorageInterface } from '../storage/interface.js';
-import { layout, escapeHtml, formatDate, statusBadge, verificationBadge, renderPipeline, renderPipelineHero, relativeTime } from './templates.js';
+import { layout, escapeHtml, formatDate, statusBadge, verificationBadge, renderPipeline, renderPipelineHero, renderDestinationDetails, relativeTime } from './templates.js';
 import { getIntegration, getIntegrationsWithStatus } from '../integrations/registry.js';
 import { getDefaultRouteStatuses, restoreDefaultRoute } from '../integrations/default-routes.js';
 
@@ -662,11 +662,29 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       return c.html(layout('Not Found', '<h1>Integration not found</h1>'), 404);
     }
 
-    const integrations = await getIntegrationsWithStatus(storage, auth.uid);
+    const [integrations, allRoutes, allCaptures] = await Promise.all([
+      getIntegrationsWithStatus(storage, auth.uid),
+      storage.listRoutes(),
+      storage.listAllCaptures(auth.uid),
+    ]);
     const integrationWithStatus = integrations.find(i => i.id === integrationId);
     const status = integrationWithStatus?.status || 'never';
     const saved = c.req.query('saved') === '1';
     const note = await storage.getIntegrationNote(auth.uid, integrationId) || '';
+
+    // Routes that use this integration as their destination
+    const integrationRoutes = allRoutes.filter(r => r.destinationType === integrationId);
+    const routeStats = integrationRoutes.map(route => {
+      const routeCaptures = allCaptures.filter(c => c.routeFinal === route.id);
+      const successCount = routeCaptures.filter(c => c.executionResult === 'success').length;
+      const totalCount = routeCaptures.length;
+      return {
+        ...route,
+        totalCaptures: totalCount,
+        successRate: totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 0,
+        lastUsed: route.lastUsed ? formatDate(route.lastUsed) : 'Never',
+      };
+    });
 
     const statusBadgeMap: Record<string, string> = {
       connected: 'badge-success',
@@ -705,6 +723,38 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
             </form>
           </div>
         ` : ''}
+      </div>
+
+      <div class="card">
+        <h3>Routes</h3>
+        ${integrationRoutes.length === 0 ? '<p class="empty-state">No routes use this integration yet.</p>' : `
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Destination</th>
+                <th>Triggers</th>
+                <th>Captures</th>
+                <th>Success</th>
+                <th>Last Used</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${routeStats.map(r => `
+                <tr>
+                  <td><strong>${escapeHtml(r.name)}</strong></td>
+                  <td>${renderDestinationDetails(r)}</td>
+                  <td>${r.triggers.length}</td>
+                  <td>${r.totalCaptures}</td>
+                  <td>${r.successRate}%</td>
+                  <td class="text-muted">${r.lastUsed}</td>
+                  <td><a href="/dashboard/routes/${r.id}" class="btn btn-secondary">View</a></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `}
       </div>
 
       <div class="card">
