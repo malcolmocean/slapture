@@ -40,6 +40,9 @@ export interface Capture {
   /** The trigger pattern string that matched this capture in the dispatcher */
   matchedTrigger?: string | null;
 
+  /** Named fields extracted by trigger captures or Mastermind */
+  extractedFields?: Record<string, string>;
+
   // Tiered regression protection fields
   routingReviewQueued?: boolean;      // Awaiting human decision on re-route
   suggestedReroute?: string | null;   // Route ID evolver thinks it should go to
@@ -195,6 +198,8 @@ export interface TriggerStats {
 export interface RouteTrigger {
   type: 'regex';
   pattern: string;
+  /** Named capture groups to extract. Maps field name → regex group index (1-based). */
+  captures?: Record<string, number>;
   priority: number;
 
   /** Draft matchers are hypotheses that need graduation. Live matchers auto-execute. Defaults to 'live'. */
@@ -338,6 +343,8 @@ export interface DispatchResult {
   reason: string;
   /** The trigger that matched (for validation context) */
   matchedTrigger?: RouteTrigger;
+  /** Fields extracted by the matched trigger's capture groups */
+  extractedFields?: Record<string, string>;
 }
 
 export interface MastermindAction {
@@ -346,6 +353,8 @@ export interface MastermindAction {
   route?: Omit<Route, 'id' | 'createdAt' | 'lastUsed' | 'recentItems'>;
   question?: string;
   reason: string;
+  /** Fields extracted by the Mastermind when routing (for routes that use field-type columns) */
+  extractedFields?: Record<string, string>;
 }
 
 /**
