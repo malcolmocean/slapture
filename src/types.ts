@@ -25,6 +25,7 @@ export interface Capture {
 
   verificationState:
     | 'human_verified'
+    | 'trigger_matched'
     | 'ai_certain'
     | 'ai_uncertain'
     | 'failed'

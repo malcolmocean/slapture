@@ -360,7 +360,7 @@ When soft-blocked or freed captures are present, include these fields:
         // Capture no longer matches - categorize by verification state
         if (capture.verificationState === 'human_verified') {
           hardBlocked.push(capture);
-        } else if (capture.verificationState === 'ai_certain') {
+        } else if (capture.verificationState === 'trigger_matched' || capture.verificationState === 'ai_certain') {
           softBlocked.push(capture);
         } else {
           // ai_uncertain, pending, failed, or undefined

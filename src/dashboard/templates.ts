@@ -264,6 +264,7 @@ export function statusBadge(status: string): string {
 export function verificationBadge(state: string): string {
   const classes: Record<string, string> = {
     human_verified: 'badge-success',
+    trigger_matched: 'badge-success',
     ai_certain: 'badge-info',
     ai_uncertain: 'badge-warning',
     failed: 'badge-danger',
@@ -271,6 +272,7 @@ export function verificationBadge(state: string): string {
   };
   const labels: Record<string, string> = {
     human_verified: 'Verified',
+    trigger_matched: 'Trigger Match',
     ai_certain: 'AI Certain',
     ai_uncertain: 'AI Uncertain',
     failed: 'Failed',
@@ -467,6 +469,19 @@ function renderMastermindCard(step: ExecutionStep): string {
   const out = step.output as Record<string, unknown> | null;
   const dynInput = (inp?.dynamicInput ?? {}) as Record<string, unknown>;
   const staticPrompt = safe(inp?.staticPrompt);
+
+  const reason = String(out?.reason ?? '');
+  const isApiError = reason.startsWith('API error:');
+
+  // If the API call failed, show an error banner instead of the normal "what AI saw" view
+  if (isApiError) {
+    const errorHtml = `<div style="background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px; padding: 1rem; margin-bottom: 0.5rem;">
+      <strong style="color: #991b1b;">Mastermind API Error</strong>
+      <p style="margin: 0.5rem 0 0; color: #991b1b;">${safe(reason)}</p>
+      <p style="margin: 0.5rem 0 0; color: #6b7280; font-size: 0.85rem;">The AI was never consulted. The capture was sent to inbox as a fallback.</p>
+    </div>`;
+    return errorHtml;
+  }
 
   const raw = safe(dynInput.raw);
   const dispatcherReason = safe(dynInput.dispatcherReason);

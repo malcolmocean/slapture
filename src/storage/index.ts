@@ -106,6 +106,26 @@ export class Storage implements StorageInterface {
     await this.saveCapture(capture, capture.username || 'default');
   }
 
+  async deleteCapture(id: string, username: string): Promise<void> {
+    const capturesDir = path.join(this.dataDir, 'captures');
+
+    // Check legacy format
+    const legacyPath = path.join(capturesDir, `${id}.json`);
+    if (fs.existsSync(legacyPath)) {
+      fs.unlinkSync(legacyPath);
+      return;
+    }
+
+    // Check user subdirectory
+    const userDir = path.join(capturesDir, username);
+    if (fs.existsSync(userDir)) {
+      const files = fs.readdirSync(userDir).filter(f => f.includes(id));
+      for (const file of files) {
+        fs.unlinkSync(path.join(userDir, file));
+      }
+    }
+  }
+
   async listCaptures(limit: number = 50, username?: string): Promise<Capture[]> {
     const captures = await this.listAllCaptures(username);
     return captures

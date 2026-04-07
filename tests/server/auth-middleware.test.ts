@@ -133,6 +133,54 @@ describe('Auth middleware', () => {
     expect(res.status).toBe(401);
   });
 
+  it('should authenticate with api-key (hyphenated) query param', async () => {
+    const { createAuthMiddleware } = await import('../../src/server/auth.js');
+    const bcrypt = await import('bcryptjs');
+    const rawKey = 'slap_k_' + 'd'.repeat(40);
+    const keyHash = await bcrypt.hash(rawKey, 10);
+
+    const crypto = await import('crypto');
+    const indexKey = crypto.createHash('sha256').update(rawKey).digest('hex');
+
+    const mockStorage = {
+      getApiKeyIndex: vi.fn().mockImplementation((hash: string) => {
+        if (hash === indexKey) return Promise.resolve({ uid: 'user-1', keyId: 'key-4' });
+        return Promise.resolve(null);
+      }),
+      getApiKey: vi.fn().mockResolvedValue({
+        id: 'key-4',
+        name: 'Test Hyphen',
+        keyHash,
+        prefix: 'slap_k_dddd',
+        temporary: false,
+        createdAt: '2026-01-01T00:00:00Z',
+        expiresAt: null,
+        lastUsedAt: null,
+        status: 'active',
+      }),
+      getUser: vi.fn().mockResolvedValue({
+        uid: 'user-1',
+        email: 'test@example.com',
+        displayName: 'Test',
+        createdAt: '2026-01-01T00:00:00Z',
+        authProvider: 'email',
+      }),
+      updateApiKey: vi.fn().mockResolvedValue(undefined),
+    } as unknown as StorageInterface;
+
+    const app = new Hono();
+    app.use('*', createAuthMiddleware(mockStorage, { publicPaths: [] }));
+    app.get('/protected', (c) => {
+      const auth = c.get('auth');
+      return c.json({ uid: auth.uid });
+    });
+
+    const res = await app.request('/protected?api-key=' + rawKey);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.uid).toBe('user-1');
+  });
+
   it('should reject revoked API key', async () => {
     const { createAuthMiddleware } = await import('../../src/server/auth.js');
     const bcrypt = await import('bcryptjs');

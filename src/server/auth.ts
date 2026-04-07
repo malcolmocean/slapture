@@ -74,7 +74,8 @@ export function createAuthMiddleware(
     }
 
     // Try API key (X-API-Key header or ?api_key query param)
-    const apiKey = c.req.header('X-API-Key') || new URL(c.req.url).searchParams.get('api_key');
+    const params = new URL(c.req.url).searchParams;
+    const apiKey = c.req.header('X-API-Key') || params.get('api_key') || params.get('api-key');
     if (apiKey) {
       const authCtx = await verifyApiKey(storage, apiKey);
       if (authCtx) {

@@ -158,6 +158,9 @@ export class CapturePipeline {
         }
       }
 
+      // Track whether the Mastermind (AI) was involved in routing
+      let routedByMastermind = false;
+
       // If no route matched (or validation rejected), consult Mastermind
       if (!route) {
         console.log(`[Pipeline] No route matched, consulting Mastermind for: "${raw}"`);
@@ -197,6 +200,7 @@ export class CapturePipeline {
           route = await this.storage.getRoute(action.routeId)
             || await this.storage.getRouteByName(action.routeId);
           console.log(`[Pipeline] Resolved route: ${route?.id || 'NOT FOUND'}`);
+          routedByMastermind = true;
 
           // Evolver fires when Mastermind routes to existing
           if (route) {
@@ -218,6 +222,7 @@ export class CapturePipeline {
           };
           await this.storage.saveRoute(newRoute);
           route = newRoute;
+          routedByMastermind = true;
 
           // Update dispatcher with new route
           this.dispatcher.updateRoutes([...routes, newRoute]);
@@ -284,7 +289,9 @@ export class CapturePipeline {
         } else if (execResult.success) {
           capture.routeFinal = route.id;
           capture.executionResult = 'success';
-          capture.verificationState = capture.routeConfidence === 'high' ? 'ai_certain' : 'ai_uncertain';
+          capture.verificationState = routedByMastermind
+            ? (capture.routeConfidence === 'high' ? 'ai_certain' : 'ai_uncertain')
+            : 'trigger_matched';
 
           // Update route's lastUsed and recentItems
           route.lastUsed = capture.timestamp;

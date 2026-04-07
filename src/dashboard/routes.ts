@@ -137,6 +137,9 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
                   <td>${verificationBadge(c.verificationState)}</td>
                   <td>
                     <a href="/dashboard/captures/${c.id}" class="btn btn-secondary">View</a>
+                    <form method="post" action="/dashboard/captures/${c.id}/delete" style="display: inline;">
+                      <button type="submit" class="btn btn-danger" onclick="return confirm('Delete this capture?')">Delete</button>
+                    </form>
                   </td>
                 </tr>
               `).join('')}
@@ -909,7 +912,7 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
       </div>
 
       <script>
-        var baseUrl = ${JSON.stringify(process.env.CALLBACK_BASE_URL || 'http://localhost:4444')};
+        var baseUrl = window.location.origin;
         document.getElementById('create-key-form').addEventListener('submit', async function(e) {
           e.preventDefault();
           var btn = document.getElementById('create-key-btn');
@@ -1172,6 +1175,15 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     await storage.updateCapture(capture);
 
     return c.redirect(`/dashboard/test-suite`);
+  });
+
+  app.post('/dashboard/captures/:captureId/delete', async (c) => {
+    const captureId = c.req.param('captureId');
+    const auth = c.get('auth');
+
+    await storage.deleteCapture(captureId, auth.uid);
+
+    return c.redirect('/dashboard/captures');
   });
 
   // Trigger Change Reviews list

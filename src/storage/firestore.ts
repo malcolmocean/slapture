@@ -50,6 +50,17 @@ export class FirestoreStorage implements StorageInterface {
     await snapshot.docs[0].ref.set(capture);
   }
 
+  async deleteCapture(id: string, username: string): Promise<void> {
+    const snapshot = await this.db.collection('captures').doc(username).collection('items')
+      .where('id', '==', id)
+      .limit(1)
+      .get();
+
+    if (!snapshot.empty) {
+      await snapshot.docs[0].ref.delete();
+    }
+  }
+
   async listCaptures(limit: number = 50, username?: string): Promise<Capture[]> {
     const captures = await this.listAllCaptures(username);
     return captures

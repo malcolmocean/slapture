@@ -7,6 +7,7 @@ export interface StorageInterface {
   saveCapture(capture: Capture, username?: string): Promise<void>;
   getCapture(id: string, username?: string): Promise<Capture | null>;
   updateCapture(capture: Capture): Promise<void>;
+  deleteCapture(id: string, username: string): Promise<void>;
   listCaptures(limit?: number, username?: string): Promise<Capture[]>;
   listAllCaptures(username?: string): Promise<Capture[]>;
   listCapturesNeedingAuth(username?: string): Promise<Capture[]>;
