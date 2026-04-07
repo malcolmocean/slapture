@@ -80,7 +80,7 @@ export class CapturePipeline {
 
       // Step 2: Dispatch
       const dispatchStart = Date.now();
-      const dispatchResult = this.dispatcher.dispatch(parsed);
+      const dispatchResult = this.dispatcher.dispatch(parsed, raw);
       capture.routeProposed = dispatchResult.routeId;
       capture.routeConfidence = dispatchResult.confidence;
       this.addTrace(capture, 'dispatch', parsed, dispatchResult, dispatchStart);

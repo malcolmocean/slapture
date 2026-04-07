@@ -56,7 +56,7 @@ describe('Dispatcher', () => {
       expect(result.confidence).toBe('high');
     });
 
-    it('should return null for unknown explicit route', () => {
+    it('should fall through to trigger matching for unknown explicit route', () => {
       const parsed: ParseResult = {
         explicitRoute: 'unknown',
         payload: 'test',
@@ -65,12 +65,36 @@ describe('Dispatcher', () => {
 
       const result = dispatcher.dispatch(parsed);
 
+      // No name match AND no trigger match → null
       expect(result.routeId).toBeNull();
-      expect(result.reason).toContain('No route named');
+      expect(result.reason).toContain('No matching triggers');
     });
 
-    // Note: Matching explicit route by prefix trigger pattern was removed in Phase 4.
-    // Explicit routes now match by name only, not by trigger patterns.
+    it('should normalize spaces/underscores in explicit route matching', () => {
+      const parsed: ParseResult = {
+        explicitRoute: 'weight log',
+        payload: 'some content',
+        metadata: {},
+      };
+
+      // Route name is 'weightlog' — normalize should match 'weight log' → 'weight log' vs 'weightlog'
+      // Actually these don't match since normalization only handles separators, not concatenation.
+      // Let's test with underscore/space equivalence instead.
+      const routesWithUnderscore: Route[] = [{
+        ...routes[0],
+        name: 'gwen_memories',
+      }];
+      const d = new Dispatcher(routesWithUnderscore);
+
+      const result = d.dispatch({
+        explicitRoute: 'gwen memories',
+        payload: 'test content',
+        metadata: {},
+      });
+
+      expect(result.routeId).toBe('route-dump');
+      expect(result.confidence).toBe('high');
+    });
   });
 
   describe('trigger matching', () => {

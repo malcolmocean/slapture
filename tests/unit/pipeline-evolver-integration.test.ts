@@ -82,14 +82,16 @@ describe('Pipeline Evolver Integration', () => {
 
   it('should save evolver test case when evolver runs', async () => {
     // Process something that will trigger mastermind -> evolver
-    await pipeline.process('gwen memories: test input', 'testuser');
+    // Use input without colon prefix so parser doesn't set explicitRoute
+    // (which would now match gwen_memories via name normalization and skip Mastermind)
+    await pipeline.process('gwen memories test input', 'testuser');
 
     // Check that a test case was saved
     const testCases = await storage.listEvolverTestCases();
     expect(testCases.length).toBeGreaterThan(0);
 
     const testCase = testCases[0];
-    expect(testCase.input.newInput).toBe('gwen memories: test input');
+    expect(testCase.input.newInput).toBe('gwen memories test input');
     expect(testCase.input.routeName).toBe('gwen_memories');
     expect(testCase.actualResult.action).toBe('skipped');
     expect(testCase.isRatchetCase).toBe(false); // Skipped = not ratchet
@@ -120,7 +122,7 @@ describe('Pipeline Evolver Integration', () => {
     }
 
     // Process to trigger evolver which should save + prune
-    await pipeline.process('gwen memories: new input', 'testuser');
+    await pipeline.process('gwen memories new input', 'testuser');
 
     const testCases = await storage.listEvolverTestCases();
     const nonRatchet = testCases.filter(tc => !tc.isRatchetCase);
