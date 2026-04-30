@@ -4,9 +4,12 @@ import { Hono } from 'hono';
 import * as fs from 'fs';
 import { Storage } from '../../src/storage';
 import { buildOAuthRoutes } from '../../src/server/oauth';
+import type { CapturePipeline } from '../../src/pipeline/index';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
+
+const stubPipeline = {} as CapturePipeline;
 
 // Helper to create app with auth context set
 function createAppWithAuth(storage: Storage, authUid: string) {
@@ -18,7 +21,7 @@ function createAppWithAuth(storage: Storage, authUid: string) {
     return next();
   });
 
-  buildOAuthRoutes(app, storage, {
+  buildOAuthRoutes(app, storage, stubPipeline, {
     intendClientId: 'test-client-id',
     intendClientSecret: 'test-client-secret',
     intendBaseUrl: 'https://intend.do',
@@ -32,7 +35,7 @@ function createAppWithAuth(storage: Storage, authUid: string) {
 function createAppNoAuth(storage: Storage) {
   const app = new Hono();
 
-  buildOAuthRoutes(app, storage, {
+  buildOAuthRoutes(app, storage, stubPipeline, {
     intendClientId: 'test-client-id',
     intendClientSecret: 'test-client-secret',
     intendBaseUrl: 'https://intend.do',

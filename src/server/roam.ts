@@ -1,9 +1,10 @@
 // src/server/roam.ts
 import type { Hono } from 'hono';
 import type { StorageInterface } from '../storage/interface.js';
+import type { CapturePipeline } from '../pipeline/index.js';
 import { RoamClient } from '../integrations/roam/client.js';
 
-export function buildRoamRoutes(app: Hono, storage: StorageInterface): void {
+export function buildRoamRoutes(app: Hono, storage: StorageInterface, pipeline: CapturePipeline): void {
 
   // JSON API: connect a Roam graph
   app.post('/api/roam/connect', async (c) => {

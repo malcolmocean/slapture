@@ -1,6 +1,7 @@
 // src/server/oauth.ts
 import type { Hono } from 'hono';
 import type { StorageInterface } from '../storage/interface.js';
+import type { CapturePipeline } from '../pipeline/index.js';
 import { installDefaultRoutes } from '../integrations/default-routes.js';
 
 export interface OAuthConfig {
@@ -87,6 +88,7 @@ function decodeState(state: string): DecodeStateResult {
 export function buildOAuthRoutes(
   app: Hono,
   storage: StorageInterface,
+  pipeline: CapturePipeline,
   config: OAuthConfig
 ): void {
 
