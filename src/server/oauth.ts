@@ -181,9 +181,18 @@ export function buildOAuthRoutes(
 
       const defaultRoutesCreated = await installDefaultRoutes('intend', storage);
       console.log(`[OAuth] intend.do connected successfully for user: ${user}`);
-      const redirectUrl = defaultRoutesCreated > 0
-        ? `/dashboard/auth?defaultRoutes=${defaultRoutesCreated}`
-        : '/dashboard/auth';
+
+      // Snapshot blocked count BEFORE kicking off retries, to decide where to redirect
+      const blockedBefore = await storage.listCapturesBlockedFor(user, 'intend');
+
+      // Fire-and-forget batch retry
+      pipeline.retryBlockedForIntegration(user, 'intend')
+        .then(summary => console.log(`[OAuth] intend retry summary for ${user}:`, summary))
+        .catch(err => console.error(`[OAuth] intend retry batch failed for ${user}:`, err));
+
+      const redirectUrl = blockedBefore.length > 0
+        ? '/dashboard/blocked'
+        : (defaultRoutesCreated > 0 ? `/dashboard/auth?defaultRoutes=${defaultRoutesCreated}` : '/dashboard/auth');
       return c.redirect(redirectUrl);
     } catch (error) {
       console.error('[OAuth] Error during token exchange:', error);
@@ -320,9 +329,16 @@ export function buildOAuthRoutes(
 
       const defaultRoutesCreated = await installDefaultRoutes('sheets', storage);
       console.log(`[OAuth/Sheets] Google Sheets connected successfully for user: ${user}`);
-      const redirectUrl = defaultRoutesCreated > 0
-        ? `/dashboard/auth?defaultRoutes=${defaultRoutesCreated}`
-        : '/dashboard/auth';
+
+      const blockedBefore = await storage.listCapturesBlockedFor(user, 'sheets');
+
+      pipeline.retryBlockedForIntegration(user, 'sheets')
+        .then(summary => console.log(`[OAuth/Sheets] sheets retry summary for ${user}:`, summary))
+        .catch(err => console.error(`[OAuth/Sheets] sheets retry batch failed for ${user}:`, err));
+
+      const redirectUrl = blockedBefore.length > 0
+        ? '/dashboard/blocked'
+        : (defaultRoutesCreated > 0 ? `/dashboard/auth?defaultRoutes=${defaultRoutesCreated}` : '/dashboard/auth');
       return c.redirect(redirectUrl);
     } catch (err) {
       console.error('[OAuth/Sheets] Error during token exchange:', err);

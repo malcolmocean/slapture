@@ -38,6 +38,10 @@ export function buildRoamRoutes(app: Hono, storage: StorageInterface, pipeline: 
     await storage.saveRoamConfig(auth.uid, { graphs });
     console.log(`[Roam] Graph "${graphName}" connected for user: ${auth.uid}`);
 
+    pipeline.retryBlockedForIntegration(auth.uid, 'roam')
+      .then(summary => console.log(`[Roam] retry summary for ${auth.uid}:`, summary))
+      .catch(err => console.error(`[Roam] retry batch failed for ${auth.uid}:`, err));
+
     return c.json({ success: true, graphName });
   });
 
@@ -100,7 +104,13 @@ export function buildRoamRoutes(app: Hono, storage: StorageInterface, pipeline: 
     await storage.saveRoamConfig(auth.uid, { graphs });
     console.log(`[Roam] Graph "${graphName}" connected for user: ${auth.uid}`);
 
-    return c.redirect('/dashboard/roam');
+    const blockedBefore = await storage.listCapturesBlockedFor(auth.uid, 'roam');
+
+    pipeline.retryBlockedForIntegration(auth.uid, 'roam')
+      .then(summary => console.log(`[Roam] retry summary for ${auth.uid}:`, summary))
+      .catch(err => console.error(`[Roam] retry batch failed for ${auth.uid}:`, err));
+
+    return c.redirect(blockedBefore.length > 0 ? '/dashboard/blocked' : '/dashboard/roam');
   });
 
   // Form-based: disconnect a Roam graph (dashboard)

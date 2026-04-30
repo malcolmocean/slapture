@@ -9,7 +9,9 @@ import type { CapturePipeline } from '../../src/pipeline/index';
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-const stubPipeline = {} as CapturePipeline;
+const stubPipeline = {
+  retryBlockedForIntegration: vi.fn().mockResolvedValue({ retried: 0, succeeded: 0, failed: 0 }),
+} as unknown as CapturePipeline;
 
 // Helper to create app with auth context set
 function createAppWithAuth(storage: Storage, authUid: string) {
