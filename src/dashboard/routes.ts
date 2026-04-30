@@ -160,6 +160,71 @@ export function buildDashboardRoutes(app: Hono, storage: StorageInterface): void
     return c.html(layout('Captures', content));
   });
 
+  // Dashboard: blocked captures view
+  app.get('/dashboard/blocked', async (c) => {
+    const auth = c.get('auth');
+    if (!auth?.uid) {
+      return c.redirect('/login');
+    }
+
+    const blocked = await storage.listCapturesNeedingAuth(auth.uid);
+    const ordered = [...blocked].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+    const tableBody = ordered.length === 0
+      ? '<p class="empty-state">No blocked captures right now.</p>'
+      : `
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Input</th>
+              <th>Route</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${ordered.map(cap => `
+              <tr>
+                <td>${formatDate(cap.timestamp)}</td>
+                <td class="text-truncate">${escapeHtml(cap.raw)}</td>
+                <td>${cap.routeFinal ? escapeHtml(cap.routeFinal) : '-'}</td>
+                <td>${statusBadge(cap.executionResult)}</td>
+                <td>
+                  <form method="post" action="/retry/${escapeHtml(cap.id)}" style="display:inline">
+                    <button type="submit" class="btn">Retry</button>
+                  </form>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+
+    const retryAllForm = ordered.length === 0 ? '' : `
+      <form method="post" action="/retry/blocked" style="margin-bottom: 1rem;">
+        <button type="submit" class="btn">Retry all blocked (${ordered.length})</button>
+      </form>
+    `;
+
+    // Auto-refresh while items are still blocked so user sees them resolve
+    const refreshTag = ordered.length > 0
+      ? '<meta http-equiv="refresh" content="3">'
+      : '';
+
+    const content = `
+      ${refreshTag}
+      <h1>Blocked Captures</h1>
+      <p class="text-muted">Captures waiting on integration auth. They retry automatically after you connect; this page refreshes every few seconds.</p>
+      ${retryAllForm}
+      <div class="card">
+        ${tableBody}
+      </div>
+    `;
+
+    return c.html(layout('Blocked', content));
+  });
+
   // Capture detail
   app.get('/dashboard/captures/:captureId', async (c) => {
     const captureId = c.req.param('captureId');
