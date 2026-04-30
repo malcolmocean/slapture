@@ -400,6 +400,12 @@ export class Storage implements StorageInterface {
     );
   }
 
+  // List captures blocked on a specific integration (e.g. 'sheets', 'intend', 'roam')
+  async listCapturesBlockedFor(username: string, integration: string): Promise<Capture[]> {
+    const blocked = await this.listCapturesNeedingAuth(username);
+    return blocked.filter(c => c.routeFinal !== null && c.routeFinal.includes(integration));
+  }
+
   // Sanitize an ID to be filesystem-safe
   private sanitizeId(id: string): string {
     // Replace characters that are unsafe for filenames: / \ : * ? " < > |

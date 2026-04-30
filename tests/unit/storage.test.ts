@@ -658,6 +658,33 @@ describe('Storage', () => {
     });
   });
 
+  describe('listCapturesBlockedFor', () => {
+    it('returns only blocked captures for the given integration', async () => {
+      const baseCapture = {
+        raw: 'x',
+        timestamp: '2026-04-01T00:00:00Z',
+        username: 'alice',
+        parsed: null,
+        routeProposed: null,
+        routeConfidence: null,
+        executionTrace: [],
+        verificationState: 'pending' as const,
+        retiredFromTests: false,
+        retiredReason: null,
+      };
+
+      await storage.saveCapture({ ...baseCapture, id: 'a', routeFinal: 'route-sheets-weight', executionResult: 'blocked_needs_auth', timestamp: '2026-04-01T00:00:00Z' }, 'alice');
+      await storage.saveCapture({ ...baseCapture, id: 'b', routeFinal: 'route-intend-todo', executionResult: 'blocked_needs_auth', timestamp: '2026-04-02T00:00:00Z' }, 'alice');
+      await storage.saveCapture({ ...baseCapture, id: 'c', routeFinal: 'route-sheets-mood', executionResult: 'blocked_auth_expired', timestamp: '2026-04-03T00:00:00Z' }, 'alice');
+      await storage.saveCapture({ ...baseCapture, id: 'd', routeFinal: 'route-sheets-weight', executionResult: 'success', timestamp: '2026-04-04T00:00:00Z' }, 'alice');
+
+      const sheetsBlocked = await storage.listCapturesBlockedFor('alice', 'sheets');
+
+      const ids = sheetsBlocked.map(c => c.id).sort();
+      expect(ids).toEqual(['a', 'c']);
+    });
+  });
+
   describe('sanitizeId helper', () => {
     it('should handle various unsafe characters', async () => {
       // Test multiple unsafe characters in one ID

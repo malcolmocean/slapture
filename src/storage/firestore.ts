@@ -86,6 +86,11 @@ export class FirestoreStorage implements StorageInterface {
     );
   }
 
+  async listCapturesBlockedFor(username: string, integration: string): Promise<Capture[]> {
+    const blocked = await this.listCapturesNeedingAuth(username);
+    return blocked.filter(c => c.routeFinal !== null && c.routeFinal.includes(integration));
+  }
+
   // Routes
   async saveRoute(route: Route): Promise<void> {
     await this.db.collection('routes').doc(route.id).set(route);

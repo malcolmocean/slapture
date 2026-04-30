@@ -11,6 +11,7 @@ export interface StorageInterface {
   listCaptures(limit?: number, username?: string): Promise<Capture[]>;
   listAllCaptures(username?: string): Promise<Capture[]>;
   listCapturesNeedingAuth(username?: string): Promise<Capture[]>;
+  listCapturesBlockedFor(username: string, integration: string): Promise<Capture[]>;
 
   // Routes
   saveRoute(route: Route): Promise<void>;
