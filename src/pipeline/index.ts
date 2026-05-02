@@ -955,4 +955,42 @@ export class CapturePipeline {
 
     return { capture };
   }
+
+  /**
+   * Retry every capture for `username` that is blocked on the named integration
+   * (e.g. 'sheets', 'intend', 'roam'). Sequential, oldest first. Errors in
+   * individual retries are caught so one failure doesn't halt the batch.
+   */
+  async retryBlockedForIntegration(
+    username: string,
+    integration: string,
+  ): Promise<{ attempted: number; succeeded: number; stillBlocked: number; failed: number }> {
+    const blocked = await this.storage.listCapturesBlockedFor(username, integration);
+    const ordered = [...blocked].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+    let succeeded = 0;
+    let stillBlocked = 0;
+    let failed = 0;
+
+    for (const capture of ordered) {
+      try {
+        const { capture: result } = await this.retryCapture(capture);
+        if (result.executionResult === 'success') {
+          succeeded += 1;
+        } else if (
+          result.executionResult === 'blocked_needs_auth' ||
+          result.executionResult === 'blocked_auth_expired'
+        ) {
+          stillBlocked += 1;
+        } else {
+          failed += 1;
+        }
+      } catch (err) {
+        failed += 1;
+        console.error(`[Pipeline] retryBlockedForIntegration: capture ${capture.id} threw:`, err);
+      }
+    }
+
+    return { attempted: ordered.length, succeeded, stillBlocked, failed };
+  }
 }

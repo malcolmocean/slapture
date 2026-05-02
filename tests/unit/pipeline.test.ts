@@ -305,4 +305,99 @@ describe('CapturePipeline', () => {
       expect(saved?.username).toBe('orphanuser');
     });
   });
+
+  describe('retryBlockedForIntegration', () => {
+    it('retries only captures matching the integration, oldest first', async () => {
+      // Two routes: one sheets, one intend
+      const sheetsRoute: Route = {
+        id: 'route-sheets',
+        name: 'sheets-test',
+        description: '',
+        triggers: [{ type: 'keyword', pattern: 'sheets', priority: 10 }],
+        schema: null, recentItems: [],
+        destinationType: 'fs',
+        destinationConfig: { filePath: 'sheets.txt' },
+        transformScript: "fs.appendFileSync(filePath, payload + '\\n')",
+        createdAt: '2026-04-01T00:00:00Z', createdBy: 'user', lastUsed: null,
+      };
+      const intendRoute: Route = { ...sheetsRoute, id: 'route-intend', name: 'intend-test', destinationConfig: { filePath: 'intend.txt' } };
+      await storage.saveRoute(sheetsRoute);
+      await storage.saveRoute(intendRoute);
+
+      const baseCapture = {
+        parsed: { payload: 'x', metadata: {} },
+        routeProposed: null, routeConfidence: null,
+        executionTrace: [],
+        verificationState: 'pending' as const,
+        retiredFromTests: false, retiredReason: null,
+      };
+
+      // Two sheets-blocked, one intend-blocked, one already-success
+      await storage.saveCapture({ ...baseCapture, id: 's1', raw: 'x', username: 'u', timestamp: '2026-04-02T00:00:00Z', routeFinal: 'route-sheets', executionResult: 'blocked_needs_auth' }, 'u');
+      await storage.saveCapture({ ...baseCapture, id: 's2', raw: 'x', username: 'u', timestamp: '2026-04-01T00:00:00Z', routeFinal: 'route-sheets', executionResult: 'blocked_needs_auth' }, 'u');
+      await storage.saveCapture({ ...baseCapture, id: 'i1', raw: 'x', username: 'u', timestamp: '2026-04-01T00:00:00Z', routeFinal: 'route-intend', executionResult: 'blocked_needs_auth' }, 'u');
+      await storage.saveCapture({ ...baseCapture, id: 'd1', raw: 'x', username: 'u', timestamp: '2026-04-01T00:00:00Z', routeFinal: 'route-sheets', executionResult: 'success' }, 'u');
+
+      // Spy on retryCapture to record call order
+      const calls: string[] = [];
+      const origRetry = pipeline.retryCapture.bind(pipeline);
+      vi.spyOn(pipeline, 'retryCapture').mockImplementation(async (cap) => {
+        calls.push(cap.id);
+        return origRetry(cap);
+      });
+
+      const summary = await pipeline.retryBlockedForIntegration('u', 'sheets');
+
+      // Order: oldest first (s2 timestamp 04-01, then s1 timestamp 04-02)
+      expect(calls).toEqual(['s2', 's1']);
+      expect(summary.attempted).toBe(2);
+      // Both succeed (fs route, no real auth required, so they "retry" successfully)
+      expect(summary.succeeded).toBe(2);
+      expect(summary.stillBlocked).toBe(0);
+      expect(summary.failed).toBe(0);
+    });
+
+    it('continues batch when an individual retry throws', async () => {
+      await storage.saveCapture({
+        id: 'a', raw: 'x', username: 'u', timestamp: '2026-04-01T00:00:00Z',
+        parsed: { payload: 'x', metadata: {} },
+        routeProposed: null, routeConfidence: null,
+        routeFinal: 'route-sheets', executionResult: 'blocked_needs_auth',
+        executionTrace: [], verificationState: 'pending' as const,
+        retiredFromTests: false, retiredReason: null,
+      }, 'u');
+      await storage.saveCapture({
+        id: 'b', raw: 'x', username: 'u', timestamp: '2026-04-02T00:00:00Z',
+        parsed: { payload: 'x', metadata: {} },
+        routeProposed: null, routeConfidence: null,
+        routeFinal: 'route-sheets', executionResult: 'blocked_needs_auth',
+        executionTrace: [], verificationState: 'pending' as const,
+        retiredFromTests: false, retiredReason: null,
+      }, 'u');
+
+      const sheetsRoute: Route = {
+        id: 'route-sheets', name: 'sheets', description: '',
+        triggers: [{ type: 'keyword', pattern: 'sheets', priority: 10 }],
+        schema: null, recentItems: [],
+        destinationType: 'fs',
+        destinationConfig: { filePath: 'sheets.txt' },
+        transformScript: "fs.appendFileSync(filePath, payload + '\\n')",
+        createdAt: '2026-04-01T00:00:00Z', createdBy: 'user', lastUsed: null,
+      };
+      await storage.saveRoute(sheetsRoute);
+
+      let callIdx = 0;
+      vi.spyOn(pipeline, 'retryCapture').mockImplementation(async (cap) => {
+        callIdx += 1;
+        if (callIdx === 1) throw new Error('boom');
+        return { capture: cap };
+      });
+
+      const summary = await pipeline.retryBlockedForIntegration('u', 'sheets');
+      expect(summary.attempted).toBe(2);
+      expect(summary.failed).toBeGreaterThanOrEqual(1);
+      // Did not abort after first throw
+      expect(callIdx).toBe(2);
+    });
+  });
 });
