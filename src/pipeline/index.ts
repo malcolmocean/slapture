@@ -80,7 +80,7 @@ export class CapturePipeline {
 
       // Step 2: Dispatch
       const dispatchStart = Date.now();
-      const dispatchResult = this.dispatcher.dispatch(parsed, raw);
+      const dispatchResult = this.dispatcher.dispatch(parsed);
       capture.routeProposed = dispatchResult.routeId;
       capture.routeConfidence = dispatchResult.confidence;
       this.addTrace(capture, 'dispatch', parsed, dispatchResult, dispatchStart);
@@ -98,19 +98,6 @@ export class CapturePipeline {
 
       if (dispatchResult.routeId) {
         route = await this.storage.getRoute(dispatchResult.routeId);
-      }
-
-      // For explicit route matches, auto-populate extractedFields from parsed payload.
-      // The parser already stripped the prefix, so payload IS the content.
-      if (route && dispatchResult.confidence === 'high' && !dispatchResult.extractedFields) {
-        const primaryTrigger = route.triggers.find(t => t.captures);
-        if (primaryTrigger?.captures) {
-          const fields: Record<string, string> = {};
-          for (const fieldName of Object.keys(primaryTrigger.captures)) {
-            fields[fieldName] = parsed.payload;
-          }
-          capture.extractedFields = fields;
-        }
       }
 
       // Step 3a: LLM Validation (if trigger-matched route with validation enabled)

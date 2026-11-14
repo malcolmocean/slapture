@@ -4,6 +4,7 @@
 // Validates whether an input belongs to a route before execution.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { latestModel } from '../models.js';
 import {
   Route,
   RouteTrigger,
@@ -34,7 +35,10 @@ const CONFIDENCE_LEVELS: ValidationConfidence[] = [
 export class Validator {
   private client: Anthropic;
 
+  private apiKey: string;
+
   constructor(apiKey: string) {
+    this.apiKey = apiKey;
     this.client = new Anthropic({ apiKey });
   }
 
@@ -128,19 +132,20 @@ Where <level> is one of:
     promptUsed: string;
   }> {
     const prompt = this.buildPrompt(context);
-    const model = context.route.validation?.model === 'sonnet'
-      ? 'claude-sonnet-4-20250514'
-      : 'claude-haiku-4-20250514';
+    const model = await latestModel(
+      context.route.validation?.model === 'sonnet' ? 'sonnet' : 'haiku',
+      this.apiKey
+    );
 
     try {
       const response = await this.client.messages.create({
         model,
-        max_tokens: 1000,
+        max_tokens: 2000,
         messages: [{ role: 'user', content: prompt }],
       });
 
-      const content = response.content[0];
-      if (content.type !== 'text') {
+      const content = response.content.find(b => b.type === 'text');
+      if (!content || content.type !== 'text') {
         return {
           result: {
             confidence: 'unsure',

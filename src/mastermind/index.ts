@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { latestModel } from '../models.js';
 import { Route, ParseResult, MastermindAction } from '../types.js';
 import type { IntegrationWithStatus } from '../integrations/registry.js';
 import { MASTERMIND_PRINCIPLES } from './principles.js';
@@ -33,7 +34,10 @@ export interface IntegrationContext {
 export class Mastermind {
   private client: Anthropic;
 
+  private apiKey: string;
+
   constructor(apiKey: string) {
+    this.apiKey = apiKey;
     this.client = new Anthropic({ apiKey });
   }
 
@@ -315,13 +319,14 @@ Respond with JSON only.`;
 
     try {
       const response = await this.client.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
+        model: await latestModel('sonnet', this.apiKey),
+        max_tokens: 4000,
         messages: [{ role: 'user', content: prompt }],
       });
 
-      const content = response.content[0];
-      if (content.type !== 'text') {
+      // Newer models may emit a thinking block before the text block
+      const content = response.content.find(b => b.type === 'text');
+      if (!content || content.type !== 'text') {
         return {
           action: {
             action: 'inbox',
@@ -412,13 +417,13 @@ Respond with JSON:
 
     try {
       const response = await this.client.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 500,
+        model: await latestModel('sonnet', this.apiKey),
+        max_tokens: 2000,
         messages: [{ role: 'user', content: prompt }],
       });
 
-      const content = response.content[0];
-      if (content.type !== 'text') {
+      const content = response.content.find(b => b.type === 'text');
+      if (!content || content.type !== 'text') {
         return { shouldGraduate: false, reason: 'Unexpected response type' };
       }
 

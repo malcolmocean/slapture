@@ -585,12 +585,9 @@ function renderSimpleStep(step: ExecutionStep, route: Route | null): string {
   const inp = (step.input || {}) as Record<string, unknown>;
 
   if (step.step === 'parse') {
-    const payload = safe(inp.raw || out.payload || (out as Record<string, unknown>).payload);
-    const explicit = out.explicitRoute ? `<span class="badge badge-info">explicit: ${safe(out.explicitRoute)}</span>` : '';
     return `<div style="display: flex; gap: 0.75rem; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #eee;">
       <strong style="min-width: 5rem;">Parse</strong>
       <span class="text-muted">${step.durationMs}ms</span>
-      ${explicit}
     </div>`;
   }
 

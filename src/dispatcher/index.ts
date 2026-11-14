@@ -12,29 +12,9 @@ export class Dispatcher {
     this.routes = routes;
   }
 
-  dispatch(parsed: ParseResult, raw?: string): DispatchResult {
-    // If explicit route specified, look for match by name
-    if (parsed.explicitRoute) {
-      const normalize = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, ' ').trim();
-      const route = this.routes.find(
-        r => normalize(r.name) === normalize(parsed.explicitRoute!)
-      );
-
-      if (route) {
-        return {
-          routeId: route.id,
-          confidence: 'high',
-          reason: `Explicit route match: ${route.name}`,
-        };
-      }
-
-      // No name match — fall through to trigger matching
-      // (triggers may still match on the raw input or payload)
-    }
-
+  dispatch(parsed: ParseResult): DispatchResult {
     // Collect all matching triggers with their routes
-    // Try raw first (if available), then payload — triggers may expect the full input
-    const matchTarget = raw || parsed.payload;
+    const matchTarget = parsed.payload;
     const matches: Array<{ route: Route; trigger: Route['triggers'][0]; match: RegExpMatchArray }> = [];
 
     for (const route of this.routes) {

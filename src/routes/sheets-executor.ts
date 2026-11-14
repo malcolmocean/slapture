@@ -3,6 +3,7 @@ import type { Route, Capture } from '../types.js';
 import type { SheetRef, SheetsAuthProvider } from '../integrations/sheets/types.js';
 import { createSheetsClient } from '../integrations/sheets/auth.js';
 import * as toolkit from '../integrations/sheets/toolkit.js';
+import { latestModel } from '../models.js';
 
 export interface SheetsExecutionResult {
   status: 'success' | 'failed' | 'blocked_needs_auth' | 'blocked_auth_expired';
@@ -473,8 +474,9 @@ export class SheetsExecutor {
             'content-type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 20,
+            model: await latestModel('haiku', apiKey),
+            // Newer models think before they answer; thinking counts against max_tokens
+            max_tokens: 1000,
             messages: [{
               role: 'user',
               content: `Which of these entries matches "${target}"? Consider alternate titles, abbreviations, author last names, and common ways people refer to books/items. Respond with ONLY the number, or "none" if no match.\n\n${numbered}`,
@@ -487,8 +489,8 @@ export class SheetsExecutor {
           return null;
         }
 
-        const data = await response.json() as { content: Array<{ text: string }> };
-        const text = data.content?.[0]?.text?.trim() ?? '';
+        const data = await response.json() as { content: Array<{ type: string; text?: string }> };
+        const text = data.content?.find(b => b.type === 'text')?.text?.trim() ?? '';
         if (text === 'none') return null;
         const idx = parseInt(text);
         if (!isNaN(idx) && idx >= 0 && idx < candidates.length) {

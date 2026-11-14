@@ -5,7 +5,6 @@ export interface Capture {
   username: string;
 
   parsed: {
-    explicitRoute: string | null;
     payload: string;
     metadata: Record<string, string>;
   } | null;
@@ -332,7 +331,6 @@ export interface Config {
 }
 
 export interface ParseResult {
-  explicitRoute: string | null;
   payload: string;
   metadata: Record<string, string>;
 }

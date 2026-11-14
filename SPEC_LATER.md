@@ -395,4 +395,5 @@ For tmux/Claude Code orchestration pattern, see: https://github.com/KyleHerndon/
   - but also! they should be able to add those updates by just giving an update to the system AS TOP-LEVEL INPUT!
     - like "intend intentions are only for today, so if something doesn't say 'today' then don't put it there!"
     - or "if I say message Jess, use whatsapp"
+  - oh theoretically we have this with integration notes, but not quite
 - [ ] if it's not sure, it'll ask (- jarred)

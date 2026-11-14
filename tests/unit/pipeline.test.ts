@@ -42,7 +42,7 @@ describe('CapturePipeline', () => {
       id: 'route-dump',
       name: 'dump',
       description: 'Dump text',
-      triggers: [{ type: 'prefix', pattern: 'dump', priority: 10 }],
+      triggers: [{ type: 'regex', pattern: '^dump\\b', priority: 10 }],
       schema: null,
       recentItems: [],
       destinationType: 'fs',
@@ -63,7 +63,7 @@ describe('CapturePipeline', () => {
   });
 
   describe('full pipeline', () => {
-    it('should process capture with explicit route', async () => {
+    it('should process capture matching trigger', async () => {
       const result = await pipeline.process('dump: hello world', 'testuser');
 
       expect(result.capture.executionResult).toBe('success');
@@ -73,7 +73,7 @@ describe('CapturePipeline', () => {
         `${TEST_FILESTORE}/testuser/dump.txt`,
         'utf-8'
       );
-      expect(fileContent).toBe('hello world\n');
+      expect(fileContent).toBe('dump: hello world\n');
     });
 
     it('should save capture to storage', async () => {
@@ -168,11 +168,11 @@ describe('CapturePipeline', () => {
       expect(result.capture.matchedTrigger).toBe('^weight\\s+\\d+');
     });
 
-    it('should not set matchedTrigger for explicit route matches', async () => {
+    it('should set matchedTrigger for trigger-matched routes', async () => {
       const result = await pipeline.process('dump: hello', 'testuser');
 
-      // Explicit route match doesn't go through trigger matching — matchedTrigger is null
-      expect(result.capture.matchedTrigger).toBeNull();
+      // All routing goes through triggers now
+      expect(result.capture.matchedTrigger).toBe('^dump\\b');
     });
   });
 
@@ -203,34 +203,6 @@ describe('CapturePipeline', () => {
       expect(result.capture.extractedFields?.content).toBe('some content here');
     });
 
-    it('should auto-populate extractedFields from payload for explicit route matches with captures config', async () => {
-      // Create a route with captures config on a trigger
-      const gwenRoute: Route = {
-        id: 'route-gwen',
-        name: 'gwen memory',
-        description: 'Gwen memories',
-        triggers: [{ type: 'prefix' as const, pattern: 'gwen memory', priority: 10, captures: { memory: 0 } }],
-        schema: null,
-        recentItems: [],
-        destinationType: 'fs',
-        destinationConfig: { filePath: 'gwen.txt' },
-        transformScript: "fs.appendFileSync(filePath, payload + '\\n')",
-        createdAt: '2026-01-21T12:00:00Z',
-        createdBy: 'user',
-        lastUsed: null,
-      };
-      await storage.saveRoute(gwenRoute);
-
-      pipeline = new CapturePipeline(storage, TEST_FILESTORE, 'test-api-key');
-
-      // Explicit route: parser strips "gwen memory: " prefix, payload = "she woke up early"
-      const result = await pipeline.process('gwen memory: she woke up early', 'testuser');
-
-      expect(result.capture.executionResult).toBe('success');
-      expect(result.capture.extractedFields).toBeDefined();
-      expect(result.capture.extractedFields?.memory).toBe('she woke up early');
-    });
-
     it('should not set extractedFields when route has no captures config', async () => {
       // The existing dump route has no captures config
       const result = await pipeline.process('dump: plain text', 'testuser');
@@ -247,7 +219,7 @@ describe('CapturePipeline', () => {
         raw: 'dump: retry test',
         timestamp: new Date().toISOString(),
         username: 'retryuser',
-        parsed: { explicitRoute: 'dump', payload: 'retry test', metadata: {} },
+        parsed: { payload: 'retry test', metadata: {} },
         routeProposed: 'route-dump',
         routeConfidence: 'high',
         routeFinal: 'route-dump',
@@ -281,7 +253,7 @@ describe('CapturePipeline', () => {
         raw: 'nonexistent: test',
         timestamp: new Date().toISOString(),
         username: 'orphanuser',
-        parsed: { explicitRoute: 'nonexistent', payload: 'test', metadata: {} },
+        parsed: { payload: 'test', metadata: {} },
         routeProposed: 'route-nonexistent',
         routeConfidence: 'high',
         routeFinal: 'route-nonexistent',

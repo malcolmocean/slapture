@@ -57,6 +57,27 @@ describe('Mastermind', () => {
     });
   });
 
+  describe('consult', () => {
+    it('should read the text block even when a thinking block comes first', async () => {
+      const action = { action: 'route', routeId: 'route-dump', reason: 'matches dump' };
+      (mastermind as any).client.messages.create.mockResolvedValue({
+        content: [
+          { type: 'thinking', thinking: 'hmm', signature: 'sig' },
+          { type: 'text', text: JSON.stringify(action) },
+        ],
+      });
+
+      const result = await mastermind.consult(
+        existingRoutes,
+        'dump this',
+        { payload: 'dump this', metadata: {} },
+        'No matching triggers found'
+      );
+
+      expect(result.action).toEqual(action);
+    });
+  });
+
   describe('response parsing', () => {
     it('should parse route action', () => {
       const response = JSON.stringify({

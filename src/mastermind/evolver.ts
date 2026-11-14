@@ -29,6 +29,7 @@
 // ╚════════════════════════════════════════════════════════════════════════════╝
 //
 import Anthropic from '@anthropic-ai/sdk';
+import { latestModel } from '../models.js';
 import { Route, RouteTrigger, EvolverResult, Capture } from '../types.js';
 import { MASTERMIND_PRINCIPLES } from './principles.js';
 
@@ -81,7 +82,10 @@ export interface TieredValidationResult {
 export class Evolver {
   private client: Anthropic;
 
+  private apiKey: string;
+
   constructor(apiKey: string) {
+    this.apiKey = apiKey;
     this.client = new Anthropic({ apiKey });
   }
 
@@ -254,13 +258,14 @@ When soft-blocked or freed captures are present, include these fields:
 
     try {
       const response = await this.client.messages.create({
-        model: 'claude-opus-4-5',
-        max_tokens: 2000,
+        model: await latestModel('opus', this.apiKey),
+        max_tokens: 4000,
         messages: [{ role: 'user', content: prompt }],
       });
 
-      const content = response.content[0];
-      if (content.type !== 'text') {
+      // Newer models may emit a thinking block before the text block
+      const content = response.content.find(b => b.type === 'text');
+      if (!content || content.type !== 'text') {
         return {
           result: {
             action: 'failed',

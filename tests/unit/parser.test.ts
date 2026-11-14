@@ -5,42 +5,29 @@ import { Parser } from '../../src/parser/index.js';
 describe('Parser', () => {
   const parser = new Parser();
 
-  describe('prefix with colon', () => {
-    it('should extract explicit route from "dump: content"', () => {
+  describe('full input preserved as payload', () => {
+    it('should preserve colon-prefixed input as full payload', () => {
       const result = parser.parse('dump: this is a test');
 
-      expect(result.explicitRoute).toBe('dump');
-      expect(result.payload).toBe('this is a test');
+      expect(result.payload).toBe('dump: this is a test');
     });
 
-    it('should handle colons in payload', () => {
+    it('should preserve input with multiple colons', () => {
       const result = parser.parse('note: remember: buy milk');
 
-      expect(result.explicitRoute).toBe('note');
-      expect(result.payload).toBe('remember: buy milk');
+      expect(result.payload).toBe('note: remember: buy milk');
     });
 
-    it('should handle multi-word route hints', () => {
+    it('should preserve multi-word colon-prefixed input', () => {
       const result = parser.parse('gwen memory: you said milk!');
 
-      expect(result.explicitRoute).toBe('gwen memory');
-      expect(result.payload).toBe('you said milk!');
+      expect(result.payload).toBe('gwen memory: you said milk!');
     });
 
-    it('should normalize multi-word route hints (lowercase, trim)', () => {
-      const result = parser.parse('Baby  Milestones: first steps today');
-
-      expect(result.explicitRoute).toBe('baby milestones');
-      expect(result.payload).toBe('first steps today');
-    });
-  });
-
-  describe('hashtag prefix', () => {
-    it('should extract route from "#tweet content"', () => {
+    it('should preserve hashtag-prefixed input', () => {
       const result = parser.parse('#tweet hello world');
 
-      expect(result.explicitRoute).toBe('tweet');
-      expect(result.payload).toBe('hello world');
+      expect(result.payload).toBe('#tweet hello world');
     });
   });
 
@@ -48,7 +35,6 @@ describe('Parser', () => {
     it('should extract source from "(from Bob)"', () => {
       const result = parser.parse('movie reco Terminator 2 (from Bob)');
 
-      expect(result.explicitRoute).toBeNull();
       expect(result.payload).toBe('movie reco Terminator 2');
       expect(result.metadata.source).toBe('Bob');
     });
@@ -66,7 +52,6 @@ describe('Parser', () => {
     it('should detect measurement pattern', () => {
       const result = parser.parse('weight 88.2kg');
 
-      expect(result.explicitRoute).toBeNull();
       expect(result.payload).toBe('weight 88.2kg');
       expect(result.metadata.detectedType).toBe('measurement');
     });
@@ -76,7 +61,6 @@ describe('Parser', () => {
     it('should pass through unstructured text', () => {
       const result = parser.parse('just some random text');
 
-      expect(result.explicitRoute).toBeNull();
       expect(result.payload).toBe('just some random text');
       expect(Object.keys(result.metadata)).toHaveLength(0);
     });

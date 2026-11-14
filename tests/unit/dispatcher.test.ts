@@ -10,7 +10,7 @@ describe('Dispatcher', () => {
       id: 'route-dump',
       name: 'dump',
       description: 'Dump to file',
-      triggers: [{ type: 'prefix', pattern: 'dump', priority: 10 }],
+      triggers: [{ type: 'regex', pattern: '^dump\\b', priority: 10 }],
       schema: null,
       recentItems: [],
       destinationType: 'fs',
@@ -42,65 +42,9 @@ describe('Dispatcher', () => {
     dispatcher = new Dispatcher(routes);
   });
 
-  describe('explicit route matching', () => {
-    it('should match explicit route with high confidence', () => {
-      const parsed: ParseResult = {
-        explicitRoute: 'dump',
-        payload: 'test content',
-        metadata: {},
-      };
-
-      const result = dispatcher.dispatch(parsed);
-
-      expect(result.routeId).toBe('route-dump');
-      expect(result.confidence).toBe('high');
-    });
-
-    it('should fall through to trigger matching for unknown explicit route', () => {
-      const parsed: ParseResult = {
-        explicitRoute: 'unknown',
-        payload: 'test',
-        metadata: {},
-      };
-
-      const result = dispatcher.dispatch(parsed);
-
-      // No name match AND no trigger match → null
-      expect(result.routeId).toBeNull();
-      expect(result.reason).toContain('No matching triggers');
-    });
-
-    it('should normalize spaces/underscores in explicit route matching', () => {
-      const parsed: ParseResult = {
-        explicitRoute: 'weight log',
-        payload: 'some content',
-        metadata: {},
-      };
-
-      // Route name is 'weightlog' — normalize should match 'weight log' → 'weight log' vs 'weightlog'
-      // Actually these don't match since normalization only handles separators, not concatenation.
-      // Let's test with underscore/space equivalence instead.
-      const routesWithUnderscore: Route[] = [{
-        ...routes[0],
-        name: 'gwen_memories',
-      }];
-      const d = new Dispatcher(routesWithUnderscore);
-
-      const result = d.dispatch({
-        explicitRoute: 'gwen memories',
-        payload: 'test content',
-        metadata: {},
-      });
-
-      expect(result.routeId).toBe('route-dump');
-      expect(result.confidence).toBe('high');
-    });
-  });
-
   describe('trigger matching', () => {
     it('should match regex trigger with medium confidence', () => {
       const parsed: ParseResult = {
-        explicitRoute: null,
         payload: 'weight 88.2kg',
         metadata: {},
       };
@@ -113,7 +57,6 @@ describe('Dispatcher', () => {
 
     it('should return null when no triggers match', () => {
       const parsed: ParseResult = {
-        explicitRoute: null,
         payload: 'random unmatched text',
         metadata: {},
       };
@@ -122,6 +65,18 @@ describe('Dispatcher', () => {
 
       expect(result.routeId).toBeNull();
       expect(result.reason).toContain('No matching triggers');
+    });
+
+    it('should match dump route via regex trigger', () => {
+      const parsed: ParseResult = {
+        payload: 'dump: test content',
+        metadata: {},
+      };
+
+      const result = dispatcher.dispatch(parsed);
+
+      expect(result.routeId).toBe('route-dump');
+      expect(result.confidence).toBe('medium');
     });
   });
 
@@ -151,7 +106,6 @@ describe('Dispatcher', () => {
       const d = new Dispatcher(routesWithCaptures);
 
       const result = d.dispatch({
-        explicitRoute: null,
         payload: 'gwen memory: she woke up early at 5am',
         metadata: {},
       });
@@ -161,9 +115,7 @@ describe('Dispatcher', () => {
     });
 
     it('should return undefined extractedFields when trigger has no captures', () => {
-      // Use the existing routes fixture (no captures defined)
       const result = dispatcher.dispatch({
-        explicitRoute: null,
         payload: 'weight 88.2kg',
         metadata: {},
       });
@@ -197,7 +149,6 @@ describe('Dispatcher', () => {
       const d = new Dispatcher(routesMulti);
 
       const result = d.dispatch({
-        explicitRoute: null,
         payload: 'weight 85.5 kg',
         metadata: {},
       });
@@ -228,7 +179,6 @@ describe('Dispatcher', () => {
       const dispatcherWithConflict = new Dispatcher(routesWithConflict);
 
       const parsed: ParseResult = {
-        explicitRoute: null,
         payload: 'weight 88.2kg',
         metadata: {},
       };
